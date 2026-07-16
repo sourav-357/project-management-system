@@ -6,6 +6,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import { errorMiddleware } from './middlewares/error.js';
+import authRouter from './router/user.route.js';
 
 
 
@@ -22,6 +23,15 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));
+
+
+
+
+// * routers
+app.use('/api/v1/auth', authRouter);
+
+
+
 
 // ! error handler middleware
 app.use(errorMiddleware);

@@ -4,34 +4,37 @@ import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { kMaxLength } from 'buffer';
+import validator from 'validator';
 
 
 
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
+        minLength: [2, "Name must contain at least 2 characters"],
         required: [true, 'name is required field'],
         trim: true,
         maxLength: [40, 'name cannot exceed 40 characters']
     },
     email: {
         type: String,
+        required: [true, "Email is required"],
+        unique: true,
         lowercase: true,
         trim: true,
-        required: [true, 'email is required field'],
-        unique: [true, 'no duplicate emails allowed']
+        validate: [validator.isEmail, "Please enter a valid email"],
     },
     password: {
         type: String,
-        trim: true,
         required: [true, 'password is required'],
-        minLength: [8, 'minimum length is 8 characters']
+        minLength: [8, 'minimum length is 8 characters'],
+        maxLength: [100, "Password cannot exceed 100 characters"],
+        select: false
     },
     role: {
         type: String,
         default: 'Student',
-        enum: ["Student", "Teacher", "Admin"],
+        enum: ['Student', 'Teacher', 'Admin'],
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
@@ -39,9 +42,9 @@ const userSchema = new mongoose.Schema({
     department: {
         type: String,
         trim: true,
-        default: ""
+        default: ''
     },
-    experties: {
+    expertise: {
         type: [String],
         default: [],
     },
@@ -71,5 +74,23 @@ const userSchema = new mongoose.Schema({
 
 
 
-export default 
 
+userSchema.methods.generateToken = function () {
+    return jwt.sign({ id: this.id }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE,
+    });
+}
+
+
+
+userSchema.pre("save", async function () {
+    if (!this.isModified("password")) {
+        return;
+    }
+    this.password = await bcrypt.hash(this.password, 10);
+});
+
+
+
+
+export const User = mongoose.model('User', userSchema)
