@@ -10,7 +10,6 @@ import { errorMiddleware } from './middlewares/error.js';
 
 
 
-
 // * middleware
 const app = express();
 dotenv.config({ quiet: true });
@@ -26,7 +25,6 @@ app.use(cors({
 
 // ! error handler middleware
 app.use(errorMiddleware);
-
 
 
 
