@@ -5,6 +5,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
+import { errorMiddleware } from './middlewares/error.js';
+
 
 
 
@@ -21,6 +23,9 @@ app.use(cors({
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));
+
+// ! error handler middleware
+app.use(errorMiddleware);
 
 
 
