@@ -6,7 +6,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 
-import { connectDB } from './config/db.js';
 
 
 
@@ -26,5 +25,4 @@ app.use(cors({
 
 
 
-// * databse connection
-connectDB();
+export default app;
