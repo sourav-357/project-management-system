@@ -56,7 +56,12 @@ export const login = asyncHandler(async (req, res, next) => {
 
 
 export const getUser = asyncHandler(async (req, res, next) => {
-
+    const user = req.user;
+    res.status(200).json({
+        success: true,
+        message: "user fetched successfully",
+        user
+    });
 });
     
 

@@ -15,7 +15,12 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id);
+    req.user = await User.findById(decoded.id).select("-resetPasswordToken -resetPasswordExpires");
+    
+    if (!req.user) {
+        return next(new ErrorHandler("Invalid token", 401));
+    }
+    next();
 });
 
 
