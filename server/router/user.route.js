@@ -15,7 +15,7 @@ router.post('/register', registerUser);
 router.post('/login', login);
 router.get('/me', isAuthenticated, getUser);
 router.get('/logout', isAuthenticated, logout);
-router.put('/password/forgot', isAuthenticated, forgotPassword);
+router.post('/password/forgot', isAuthenticated, forgotPassword);
 router.put('/password/reset/:token', isAuthenticated, resetPassword);
 
 

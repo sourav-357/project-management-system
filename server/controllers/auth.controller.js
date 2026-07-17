@@ -146,7 +146,7 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
 
     const { password, confirmPassword } = req.body;
     if (password !== confirmPassword) {
-        return next(new ErrorHandler("Passwords do not match", 400));
+        return next(new ErrorHandler("Passwords and confirm passwords do not match", 400));
     }
 
     user.password = password;
