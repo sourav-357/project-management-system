@@ -77,7 +77,7 @@ const userSchema = new mongoose.Schema({
 
 userSchema.pre("save", async function () {
     if (!this.isModified("password")) {
-        next();
+        return;
     }
     this.password = await bcrypt.hash(this.password, 10);
 });
@@ -86,7 +86,7 @@ userSchema.pre("save", async function () {
 
 userSchema.methods.generateToken = function () {
     return jwt.sign({ id: this.id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE,
+        expiresIn: process.env.JWT_EXPIRE * 24 * 60 * 60 * 1000,
     });
 }
 
@@ -94,6 +94,17 @@ userSchema.methods.generateToken = function () {
 
 userSchema.methods.comparePassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
+}
+
+
+
+userSchema.methods.generateResetPasswordToken = function () {
+    const resetToken = crypto.randomBytes(20).toString('hex');
+
+    this.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    this.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+    return resetToken;
 }
 
 

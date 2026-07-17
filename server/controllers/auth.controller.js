@@ -4,6 +4,7 @@
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { User } from '../models/user.js';
+import { generateForgotPasswordEmailTemplate } from '../utils/emailTemplates.js';
 import { generateToken } from '../utils/generateToken.js';
 
 
@@ -84,7 +85,41 @@ export const logout = asyncHandler(async (req, res, next) => {
 
 
 export const forgotPassword = asyncHandler(async (req, res, next) => {
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+        return next(new ErrorHandler("User not found with this email", 400));
+    }
 
+    const resetToken = user.generateResetPasswordToken();
+    if (!resetToken) {
+        return next(new ErrorHandler("Error generating reset token", 500));
+    }
+    // * save reset token and expiry date in database
+    await user.save({ validateBeforeSave: false });
+
+    const resetPasswordUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const message = generateForgotPasswordEmailTemplate(resetPasswordUrl);
+
+    try {
+        // * send email
+        await sendEmail({
+            to: user.email,
+            subject: "FYM Project Management System - Password Reset Request",
+            message
+        });
+
+        res.status(200).json({
+            success: true,
+            message: `Password reset email sent successfully to ${user.email}`
+        });
+
+    } catch (error) {
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpire = undefined;
+        await user.save({ validateBeforeSave: false }); // ! save the changes in database
+
+        return next(new ErrorHandler(error.message || "Error sending email", 500));
+    }
 });
 
 

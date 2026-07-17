@@ -13,9 +13,9 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
     if (!token) {
         return next(new ErrorHandler("Please login to access this resource", 401));
     }
-
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select("-resetPasswordToken -resetPasswordExpires");
+    req.user = await User.findById(decoded.id).select("-resetPasswordToken -resetPasswordExpire");
     
     if (!req.user) {
         return next(new ErrorHandler("Invalid token", 401));
