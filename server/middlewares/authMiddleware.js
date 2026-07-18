@@ -26,7 +26,7 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
 
 
 
-export const isAdmin = async (role) => {
+export const isAuthorized = (role) => {
     return asyncHandler(async (req, res, next) => {
         if (req.user.role !== role) {
             return next(new ErrorHandler("You are not authorized to access this resource", 403));
