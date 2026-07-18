@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import { errorMiddleware } from './middlewares/error.js';
 import authRouter from './router/user.route.js';
+import adminRouter from './router/admin.route.js';
 
 
 
@@ -29,6 +30,7 @@ app.use(cors({
 
 // * routers
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/admin', adminRouter);
 
 
 

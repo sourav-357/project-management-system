@@ -25,3 +25,8 @@ export const isAuthenticated = asyncHandler(async (req, res, next) => {
 
 
 
+
+export const isAdmin = asyncHandler(async (req, res, next) => {});
+
+
+
