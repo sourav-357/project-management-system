@@ -11,9 +11,10 @@ export const createUser = async (userData) => {
     try {
         const user = new User(userData);
         await user.save();
+        user.password = userData.password;
         return user;
     } catch (error) {
-        throw new Error('Error creating user: ' + error.message);
+        throw new Error('Error creating user');
     }
 }
 
@@ -22,7 +23,7 @@ export const createUser = async (userData) => {
 export const updateUser = async (id, updateData) => {
     try {
         const user = await User.findByIdAndUpdate(id, updateData, { 
-            new: true,
+            returnDocument: "after",
             runValidators: true,
         }).select('-password');
 

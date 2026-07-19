@@ -15,6 +15,12 @@ export const createStudent = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Please provide all the required fields', 400));
     }
 
+    // if user already exists, return error
+    const userToBeCreated = await User.findOne({ email });
+    if (userToBeCreated) {
+        return next(new ErrorHandler('User already exists', 400));
+    }
+
     const user = await userService.createUser({ name, email, password, department, role: 'Student' });
     res.status(201).json({
         success: true,
@@ -39,10 +45,10 @@ export const updateStudent = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('You are not authorized to update this user', 403));
     }
 
-    // ! must remove password and role from updateData
-    delete updateData._id;
-    delete updateData.password;
-    delete updateData.role;
+    // even admin could not update other user's password, role and id
+    if (updateData.password || updateData.role || updateData.id) {
+        return next(new ErrorHandler('You cannot update other user\'s password, role or id', 403));
+    }
 
     const updatedUser = await userService.updateUser(id, updateData);
     if (!updatedUser) {
