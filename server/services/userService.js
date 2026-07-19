@@ -60,3 +60,15 @@ export const deleteUser = async (id) => {
 
 
 
+
+export const getAllUsers = async () => {
+    const users = await User.find({
+        role: { $ne: "Admin" }
+    })
+    .select("-password -resetPasswordToken -resetPasswordExpire")
+    .sort({ createdAt: -1 });
+
+    return { users };
+};
+
+
