@@ -68,6 +68,10 @@ export const getAllUsers = async () => {
     .select("-password -resetPasswordToken -resetPasswordExpire")
     .sort({ createdAt: -1 });
 
+    if (!users.length) {
+        throw new Error('No users found');
+    }
+
     return { users };
 };
 

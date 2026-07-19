@@ -179,15 +179,12 @@ export const deleteTeacher = asyncHandler(async (req, res, next) => {
 
 
 export const getAllUsers = asyncHandler(async (req, res, next) => {
-    const { user } = await userService.getAllUsers();
-    if (!users.length) {
-        return next(new ErrorHandler("No users found", 404));
-    }
+    const { users } = await userService.getAllUsers();
 
     res.status(200).json({
         success: true,
         message: 'All users fetched successfully',
-        data: { user },
+        data: { users },
     });
 });
 
