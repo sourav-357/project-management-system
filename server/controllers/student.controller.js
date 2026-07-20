@@ -4,7 +4,6 @@
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { User } from '../models/user.js';
-import * as userService from '../services/userService.js';
 import * as projectService from '../services/projectService.js';
 
 
@@ -87,4 +86,32 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
         data: { project: updatedProject },
     });
 });
+
+
+
+
+export const getAvailableSupervisors = asyncHandler(async (req, res, next) => {
+    
+    const supervisors = await User.find({ role: 'supervisor' })
+        .sort({ createdAt: -1 })
+        .select('name email department expertise')
+        .lean();
+
+    if (!supervisors) {
+        return res.status(404).json({
+            success: false,
+            message: 'No supervisors found',
+            data: { supervisors: null },
+        });
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Supervisors fetched successfully',
+        data: { supervisors },
+    });
+
+});
+
+
 
