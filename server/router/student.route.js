@@ -4,6 +4,7 @@ import express from 'express';
 import * as studentController from '../controllers/student.controller.js';
 import multer from 'multer';
 import { isAuthenticated, isAuthorized } from '../middlewares/authMIddleware.js';
+import { upload, handleUploadError } from '../middlewares/upload.js';
 
 
 
@@ -29,8 +30,8 @@ router.post(
     '/upload/:projectId', 
     isAuthenticated, 
     isAuthorized('Student'), 
-    // upload.array('files', 10),
-    // handleUploadError, 
+    upload.array('files', 10),
+    handleUploadError, 
     studentController.uploadFiles
 );
 
