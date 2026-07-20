@@ -12,6 +12,7 @@ import { Notification } from '../models/notification.js';
 import * as projectService from '../services/projectService.js';
 import * as requestService from '../services/requestService.js';
 import * as notificationService from '../services/notificationService.js';
+import * as fileService from '../services/fileService.js';
 
 
 
@@ -274,7 +275,7 @@ export const downloadFile = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('File not found', 404));
     }
 
-    streamDownload(file.fileUrl, res, file.originalName);
+    fileService.streamDownload(file.fileUrl, res, file.originalName);
 });
 
     
