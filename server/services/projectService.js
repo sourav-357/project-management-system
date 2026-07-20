@@ -19,7 +19,7 @@ export const createProject = async (projectData) => {
         await project.save();
         return project;
     } catch (error) {
-        throw new Error('Error creating project');
+        throw new ErrorHandler('Error creating project: ' + error.message, 500);
     }
 }
 
@@ -30,12 +30,33 @@ export const getProjectById = async (id) => {
         const project = await Project.findById(id).sort({ createdAt: -1 }).populate('supervisor', 'name email').populate('student', 'name email');
         return project;
     } catch (error) {
-        throw new Error('Error getting project by id: ' + error.message);
+        throw new ErrorHandler('Error fetching project: ' + error.message, 500);
     }
 }
 
 
 
 export const addFilesToProject = async (projectId, files) => {
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) {
+            throw new ErrorHandler('Project not found', 404);
+        }
+
+        const fileMetadata = files.map((file) => ({
+            fileType: file.mimetype,
+            fileUrl: file.path,
+            originalName: file.originalName,
+            uploadedAt: new Date(),
+        }));
+
+        project.files = fileMetadata;
+        await project.save();
+        return project;
+        
+    } catch (error) {
+        throw new ErrorHandler('Error adding files to project: ' + error.message, 500);
+    }
+}
 
 
