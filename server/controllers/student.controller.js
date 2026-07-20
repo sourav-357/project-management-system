@@ -77,6 +77,10 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('You are not authorized to access this resource', 403));
     }
 
+    if (project.status === 'rejected') {
+        return next(new ErrorHandler('This project has been rejected. You cannot upload files', 400));
+    }
+
     if (!req.files || req.files.length === 0) {
         return next(new ErrorHandler('No files uploaded', 400));
     }
