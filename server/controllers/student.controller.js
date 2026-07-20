@@ -55,7 +55,7 @@ export const submitProposal = asyncHandler(async (req, res, next) => {
     };
     const project = await projectService.createProject(projectData);
 
-    await user.findByIdAndUpdate(studentId, { project: project._id });
+    await User.findByIdAndUpdate(studentId, { project: project._id });
     res.status(201).json({
         success: true,
         message: 'Project proposal submitted successfully',
