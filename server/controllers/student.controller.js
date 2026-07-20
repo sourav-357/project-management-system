@@ -11,7 +11,7 @@ import * as notificationService from '../services/notificationService.js';
 
 
 export const getStudentProject = asyncHandler(async (req, res, next) => {
-    const studentId = req.user.id;
+    const studentId = req.user._id;
     const project = await projectService.getProjectByStudent(studentId);
 
     if (!project) {
@@ -94,7 +94,7 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
 
 export const getAvailableSupervisors = asyncHandler(async (req, res, next) => {
     
-    const supervisors = await User.find({ role: 'supervisor' })
+    const supervisors = await User.find({ role: 'Teacher' })
         .sort({ createdAt: -1 })
         .select('name email department expertise')
         .lean();
@@ -112,7 +112,6 @@ export const getAvailableSupervisors = asyncHandler(async (req, res, next) => {
         message: 'Supervisors fetched successfully',
         data: { supervisors },
     });
-
 });
 
 

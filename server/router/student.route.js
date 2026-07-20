@@ -12,7 +12,7 @@ const router = express.Router();
 
 
 
-router.post(
+router.get(
     '/project', 
     isAuthenticated, 
     isAuthorized('Student'), 
@@ -36,10 +36,24 @@ router.post(
 );
 
 router.get(
-    '/get-available-supervisors', 
+    '/fetch-supervisors', 
     isAuthenticated, 
     isAuthorized('Student'), 
     studentController.getAvailableSupervisors
+);
+
+router.get(
+    '/supervisor', 
+    isAuthenticated, 
+    isAuthorized('Student'), 
+    studentController.getSupervisor
+);
+
+router.post(
+    '/supervisor-request', 
+    isAuthenticated, 
+    isAuthorized('Student'), 
+    studentController.requestSupervisor
 );
 
 
