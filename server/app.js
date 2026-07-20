@@ -29,6 +29,13 @@ app.use(cors({
 
 
 
+// * uploads
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+
+
 // * routers
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/admin', adminRouter);
