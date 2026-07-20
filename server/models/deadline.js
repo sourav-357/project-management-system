@@ -39,5 +39,5 @@ deadlineSchema.index({ createdBy: 1 });
 
 
 
-export const Project = mongoose.models.Deadline || mongoose.model('Deadline', deadlineSchema);
+export const Deadline = mongoose.models.Deadline || mongoose.model('Deadline', deadlineSchema);
 

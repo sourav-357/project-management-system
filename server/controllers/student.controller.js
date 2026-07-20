@@ -240,7 +240,7 @@ export const getFeedback = asyncHandler(async (req, res, next) => {
     const studentId = req.user._id;
 
     const project = await projectService.getProjectById(projectId);
-    if (!project || project.student.toString() !== studentId.toString()) {
+    if (!project || project.student._id.toString() !== studentId.toString()) {
         return next(new ErrorHandler('You are not authorized to access this resource', 403));
     }
 

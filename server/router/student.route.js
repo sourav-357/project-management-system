@@ -64,7 +64,7 @@ router.get(
 );
 
 router.get(
-    'fetch-dashboard-stats', 
+    '/fetch-dashboard-stats', 
     isAuthenticated, 
     isAuthorized('Student'), 
     studentController.getDashboardStats
