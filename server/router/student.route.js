@@ -70,6 +70,13 @@ router.get(
     studentController.getDashboardStats
 );
 
+router.get(
+    '/download/:projectId/:fileId',
+    isAuthenticated, 
+    isAuthorized('Student'), 
+    studentController.downloadFile
+);
+
 
 
 export default router;
