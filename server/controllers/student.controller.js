@@ -3,10 +3,16 @@
 
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
+
 import { User } from '../models/user.js';
+import { Project } from '../models/project.js';
+import { Deadline } from '../models/deadline.js';
+import { Notification } from '../models/notification.js';
+
 import * as projectService from '../services/projectService.js';
 import * as requestService from '../services/requestService.js';
 import * as notificationService from '../services/notificationService.js';
+
 
 
 
@@ -186,3 +192,65 @@ export const requestSupervisor = asyncHandler(async (req, res, next) => {
 
 
 
+export const getDashboardStats = asyncHandler(async (req, res, next) => {
+    const studentId = req.user._id;
+    const user = await User.findById(studentId);
+
+    if (!user) {
+        return next(new ErrorHandler('User not found', 404));
+    }
+
+    const project = await Project.findOne({ 
+        student: studentId })
+        .sort({ createdAt: -1 })
+        .populate('supervisor', 'name email')
+        .lean();
+
+    const now = new Date();
+    const deadlines = await Project.find({ 
+        student: studentId, 
+        deadline: {$gte: now } 
+    }).select('title description deadline').sort({ deadline: -1 }).populate('supervisor', 'name email').limit(3).lean();
+
+    const topNotifications = await Notification.find({ user: studentId })
+        .populate('user', 'name')
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .lean();
+
+    const feedbackNotifications = project?.feedback && project?.feedback.length > 0 ? project.feedback
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 2)
+    : [];
+
+    const supervisorName = project?.supervisor?.name || null;
+
+    res.status(200).json({
+        success: true,
+        message: 'Dashboard stats fetched successfully',
+        data: { user, project, deadlines, topNotifications, feedbackNotifications, supervisorName },
+    });
+});
+
+
+
+
+export const getFeedback = asyncHandler(async (req, res, next) => {
+    const { projectId } = req.params;
+    const studentId = req.user._id;
+
+    const project = await projectService.getProjectById(projectId);
+    if (!project || project.student.toString() !== studentId.toString()) {
+        return next(new ErrorHandler('You are not authorized to access this resource', 403));
+    }
+
+    const sortedFeedback = project.feedback.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.status(200).json({
+        success: true,
+        message: 'Feedback fetched successfully',
+        data: { feeedback: sortedFeedback },
+    });
+});
+
+    

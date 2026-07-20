@@ -56,6 +56,20 @@ router.post(
     studentController.requestSupervisor
 );
 
+router.get(
+    '/feedback/:projectId', 
+    isAuthenticated, 
+    isAuthorized('Student'), 
+    studentController.getFeedback
+);
+
+router.get(
+    'fetch-dashboard-stats', 
+    isAuthenticated, 
+    isAuthorized('Student'), 
+    studentController.getDashboardStats
+);
+
 
 
 export default router;
