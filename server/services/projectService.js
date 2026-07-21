@@ -60,3 +60,18 @@ export const addFilesToProject = async (projectId, files) => {
 }
 
 
+
+
+export const getAllProjects = async () => {
+    try {
+        const projects = await Project.find().sort({ createdAt: -1 }).populate('supervisor', 'name email').populate('student', 'name email');
+        return { projects };
+    } catch (error) {
+        throw new ErrorHandler('Error fetching projects: ' + error.message, 500);
+    }
+}
+
+
+
+
+

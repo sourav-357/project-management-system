@@ -19,6 +19,7 @@ router.put('/update-teacher/:id', isAuthenticated, isAuthorized('Admin'), adminC
 router.delete('/delete-teacher/:id', isAuthenticated, isAuthorized('Admin'), adminController.deleteTeacher);
 
 router.get('/getAllUsers', isAuthenticated, isAuthorized('Admin'), adminController.getAllUsers);
+router.get('/projects', isAuthenticated, isAuthorized('Admin'), adminController.getAllProjects);
 
 
 export default router;

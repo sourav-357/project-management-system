@@ -5,6 +5,7 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { User } from '../models/user.js';
 import * as userService from '../services/userService.js';
+import * as projectService from '../services/projectService.js';
 
 
 
@@ -190,4 +191,14 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
 
 
 
+
+export const getAllProjects = asyncHandler(async (req, res, next) => {
+    const { projects } = await projectService.getAllProjects();
+
+    res.status(200).json({
+        success: true,
+        message: 'All projects fetched successfully',
+        data: { projects },
+    });
+});
 

@@ -37,12 +37,6 @@ export const login = asyncHandler(async (req, res, next) => {
     const { password, role } = req.body;
     const email = req.body.email?.toLowerCase().trim();
 
-    // if any other user is logged in, log them out
-    const loggedUser = await User.findOne({ _id: req.user._id });
-    if (loggedUser) {
-        await user.logout();
-    }
-
     if (!email || !password || !role) {
         return next(new ErrorHandler("Please provide all required fields", 400))
     }
