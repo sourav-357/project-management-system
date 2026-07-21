@@ -202,3 +202,39 @@ export const getAllProjects = asyncHandler(async (req, res, next) => {
     });
 });
 
+
+
+
+export const assignSupervisor = asyncHandler(async (req, res, next) => {
+    const { projectId, supervisorId } = req.body;
+    const adminId = req.user._id;
+
+    const admin = await User.findById(adminId);
+    if (!admin || !admin.role || admin.role !== 'Admin') {
+        return next(new ErrorHandler('You are not authorized to access this resource', 403));
+    }
+
+    const project = await projectService.getProjectById(projectId);
+    if (!project) {
+        return next(new ErrorHandler('Project not found', 404));
+    }
+
+    if (project.supervisor) {
+        return next(new ErrorHandler('Project already has a supervisor', 400));
+    }
+
+    const supervisor = await User.findById(supervisorId);
+    if (!supervisor || !supervisor.role || supervisor.role !== 'Teacher' || supervisor.assignedStudents.length >= supervisor.maxStudents) {
+        return next(new ErrorHandler('cannot assign this supervisor', 400));
+    }
+
+    project.supervisor = supervisorId;
+    await project.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Supervisor assigned successfully',
+        data: { project },
+    });
+})
+

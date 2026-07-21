@@ -52,6 +52,10 @@ export const submitProposal = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('You already have a project', 400));
     }
 
+    if (existingProject && existingProject.status === 'rejected') {
+        await Project.findByIdAndDelete(existingProject._id);
+    }
+
     const projectData = {
         student: studentId,
         supervisor: null,
