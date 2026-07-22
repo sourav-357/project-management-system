@@ -1,12 +1,8 @@
-
-
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import validator from 'validator';
-
-
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -14,7 +10,7 @@ const userSchema = new mongoose.Schema({
         minLength: [2, "Name must contain at least 2 characters"],
         required: [true, 'name is required field'],
         trim: true,
-        maxLength: [40, 'name cannot exceed 40 characters']
+        maxLength: [50, 'name cannot exceed 50 characters']
     },
     email: {
         type: String,
@@ -35,6 +31,19 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'Student',
         enum: ['Student', 'Teacher', 'Admin'],
+    },
+    status: {
+        type: String,
+        enum: ['active', 'suspended', 'archived'],
+        default: 'active',
+    },
+    avatar: {
+        type: String,
+        default: '',
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
@@ -69,11 +78,13 @@ const userSchema = new mongoose.Schema({
         ref: "Project",
         default: null
     }
-},{ timestamps: true }
+}, { timestamps: true }
 );
 
-
-
+// Indexes based on query patterns
+userSchema.index({ role: 1 });
+userSchema.index({ status: 1, isDeleted: 1 });
+userSchema.index({ department: 1 });
 
 userSchema.pre("save", async function () {
     if (!this.isModified("password")) {
@@ -82,21 +93,26 @@ userSchema.pre("save", async function () {
     this.password = await bcrypt.hash(this.password, 10);
 });
 
+userSchema.methods.generateAccessToken = function () {
+    return jwt.sign(
+        { id: this._id, role: this.role },
+        process.env.JWT_SECRET || 'fallback_secret_key_for_dev_env',
+        { expiresIn: process.env.JWT_ACCESS_EXPIRE || '15m' }
+    );
+};
 
-
-userSchema.methods.generateToken = function () {
-    return jwt.sign({ id: this.id }, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE * 24 * 60 * 60 * 1000,
-    });
-}
-
-
+userSchema.methods.generateRefreshToken = function () {
+    return jwt.sign(
+        { id: this._id },
+        process.env.REFRESH_TOKEN_SECRET || 'fallback_refresh_secret_key_for_dev_env',
+        { expiresIn: process.env.JWT_REFRESH_EXPIRE || '7d' }
+    );
+};
 
 userSchema.methods.comparePassword = async function (enteredPassword) {
+    if (!enteredPassword || !this.password) return false;
     return await bcrypt.compare(enteredPassword, this.password);
-}
-
-
+};
 
 userSchema.methods.generateResetPasswordToken = function () {
     const resetToken = crypto.randomBytes(20).toString('hex');
@@ -105,8 +121,6 @@ userSchema.methods.generateResetPasswordToken = function () {
     this.resetPasswordExpire = Date.now() + 15 * 60 * 1000; // 15 minutes
 
     return resetToken;
-}
+};
 
-
-
-export const User = mongoose.model('User', userSchema)
+export const User = mongoose.models.User || mongoose.model('User', userSchema);

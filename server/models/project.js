@@ -1,10 +1,47 @@
-
-
-
-
 import mongoose from 'mongoose';
 
+export const PROJECT_STATUS = {
+    DRAFT: 'draft',
+    PENDING: 'pending',
+    SUBMITTED: 'submitted',
+    APPROVED: 'approved',
+    REJECTED: 'rejected',
+    ASSIGNED: 'assigned',
+    COMPLETED: 'completed',
+};
 
+const milestoneSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: [true, 'Milestone title is required'],
+        trim: true,
+        maxLength: [150, 'Title cannot exceed 150 characters'],
+    },
+    description: {
+        type: String,
+        trim: true,
+        default: '',
+    },
+    dueDate: {
+        type: Date,
+        required: [true, 'Milestone due date is required'],
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'submitted', 'approved', 'rejected'],
+        default: 'pending',
+    },
+    submissionUrl: {
+        type: String,
+        default: '',
+    },
+    teacherFeedback: {
+        type: String,
+        default: '',
+    },
+    submittedAt: Date,
+    reviewedAt: Date,
+}, { timestamps: true });
 
 const projectSchema = new mongoose.Schema({
     student: {
@@ -32,8 +69,16 @@ const projectSchema = new mongoose.Schema({
     status: {
         type: String,
         required: [true, 'Project status is required'],
-        enum: ['pending', 'approved', 'rejected', 'completed'],
-        default: 'pending'
+        enum: Object.values(PROJECT_STATUS),
+        default: PROJECT_STATUS.PENDING || PROJECT_STATUS.SUBMITTED,
+    },
+    isDraft: {
+        type: Boolean,
+        default: false,
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
     },
     files: [
         {
@@ -48,6 +93,10 @@ const projectSchema = new mongoose.Schema({
             originalName: {
                 type: String,
                 required: true
+            },
+            size: {
+                type: Number,
+                default: 0
             },
             uploadedAt: {
                 type: Date,
@@ -80,22 +129,25 @@ const projectSchema = new mongoose.Schema({
                 trim: true,
                 maxLength: [1000, 'Feedback message cannot exceed 1000 characters'],
             },
+            createdAt: {
+                type: Date,
+                default: Date.now,
+            }
         }
     ],
+    milestones: [milestoneSchema],
     deadline: {
         type: Date
     }
-}, { timestamps: true }
+}, { timestamps: true });
+
+// * Compound Indexes based on production query access patterns
+projectSchema.index({ student: 1, isDeleted: 1 });
+projectSchema.index(
+    { student: 1 },
+    { unique: true, partialFilterExpression: { isDeleted: false } } // Enforces 1 active project per student
 );
-
-
-
-// * indexing for better performance
-projectSchema.index({ student: 1 });
-projectSchema.index({ supervisor: 1 });
-projectSchema.index({ status: 1 });
-
-
+projectSchema.index({ supervisor: 1, status: 1, isDeleted: 1 });
+projectSchema.index({ status: 1, createdAt: -1 });
 
 export const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
-

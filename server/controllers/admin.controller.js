@@ -1,28 +1,31 @@
-
-
-
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { User } from '../models/user.js';
+import { Project } from '../models/project.js';
 import * as userService from '../services/userService.js';
 import * as projectService from '../services/projectService.js';
+import * as notificationService from '../services/notificationService.js';
 
-
-
-
+// * Create Student
 export const createStudent = asyncHandler(async (req, res, next) => {
     const { name, email, password, department } = req.body;
     if (!name || !email || !password || !department) {
-        return next(new ErrorHandler('Please provide all the required fields', 400));
+        return next(new ErrorHandler('Please provide name, email, password, and department', 400));
     }
 
-    // if user already exists, return error
-    const userToBeCreated = await User.findOne({ email });
-    if (userToBeCreated) {
-        return next(new ErrorHandler('User already exists', 400));
+    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existing) {
+        return next(new ErrorHandler('User with this email already exists', 400));
     }
 
-    const user = await userService.createUser({ name, email, password, department, role: 'Student' });
+    const user = await userService.createUser({
+        name,
+        email: email.toLowerCase().trim(),
+        password,
+        department,
+        role: 'Student'
+    });
+
     res.status(201).json({
         success: true,
         message: 'Student created successfully',
@@ -30,31 +33,20 @@ export const createStudent = asyncHandler(async (req, res, next) => {
     });
 });
 
-
-
-
-
+// * Update Student
 export const updateStudent = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    const user = await User.findById(id);
-    if (!user) {
-        return next(new ErrorHandler('User not found', 404));
-    }
-    if (user.role !== 'Student') {
-        return next(new ErrorHandler('You are not authorized to update this user', 403));
-    }
+    delete updateData.password;
+    delete updateData.role;
 
-    // even admin could not update other user's password or id
-    if (updateData.password || updateData.id) {
-        return next(new ErrorHandler('You cannot update other user\'s password or id', 403));
+    const user = await User.findById(id);
+    if (!user || user.role !== 'Student') {
+        return next(new ErrorHandler('Student not found', 404));
     }
 
     const updatedUser = await userService.updateUser(id, updateData);
-    if (!updatedUser) {
-        return next(new ErrorHandler('User not updated', 404));
-    }
 
     res.status(200).json({
         success: true,
@@ -63,58 +55,50 @@ export const updateStudent = asyncHandler(async (req, res, next) => {
     });
 });
 
-
-
-
-
+// * Delete Student (Soft Delete)
 export const deleteStudent = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
-    const user = await userService.getUserById(id);
-    if (!user) {
-        return next(new ErrorHandler('User not found', 404));
-    }
-    if (user.role !== 'Student') {
-        return next(new ErrorHandler('You are not authorized to delete this user', 403));
+    const user = await User.findById(id);
+    if (!user || user.role !== 'Student') {
+        return next(new ErrorHandler('Student not found', 404));
     }
 
-    await userService.deleteUser(id);
+    user.isDeleted = true;
+    user.status = 'archived';
+    await user.save();
 
     res.status(200).json({
         success: true,
-        message: 'Student deleted successfully'
+        message: 'Student archived/deleted successfully'
     });
 });
 
-
-
-// ================================= TEACHER ================================= //
-
-
-
+// * Create Teacher
 export const createTeacher = asyncHandler(async (req, res, next) => {
     const { name, email, password, department, maxStudents, expertise } = req.body;
-    if (!name || !email || !password || !department || !maxStudents || !expertise) {
-        return next(new ErrorHandler('Please provide all the required fields', 400));
+    if (!name || !email || !password || !department) {
+        return next(new ErrorHandler('Please provide name, email, password, and department', 400));
     }
 
-    // if user already exists, return error
-    const userToBeCreated = await User.findOne({ email });
-    if (userToBeCreated) {
-        return next(new ErrorHandler('User already exists', 400));
+    const existing = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existing) {
+        return next(new ErrorHandler('User with this email already exists', 400));
     }
 
-    const user = await userService.createUser({ 
-        name, 
-        email, 
-        password, 
-        department, 
-        role: 'Teacher', 
-        expertise: Array.isArray(expertise) 
-            ? expertise 
-            : typeof expertise === 'string' && expertise.trim() !== '' 
-            ? expertise.split(',').map(item => item.trim()) 
+    const user = await userService.createUser({
+        name,
+        email: email.toLowerCase().trim(),
+        password,
+        department,
+        role: 'Teacher',
+        maxStudents: maxStudents || 10,
+        expertise: Array.isArray(expertise)
+            ? expertise
+            : typeof expertise === 'string' && expertise.trim() !== ''
+            ? expertise.split(',').map(item => item.trim())
             : [],
-        maxStudents });
+    });
+
     res.status(201).json({
         success: true,
         message: 'Teacher created successfully',
@@ -122,31 +106,24 @@ export const createTeacher = asyncHandler(async (req, res, next) => {
     });
 });
 
-
-
-
-
+// * Update Teacher
 export const updateTeacher = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    const user = await User.findById(id);
-    if (!user) {
-        return next(new ErrorHandler('User not found', 404));
-    }
-    if (user.role !== 'Teacher') {
-        return next(new ErrorHandler('You are not authorized to update this user', 403));
+    delete updateData.password;
+    delete updateData.role;
+
+    if (updateData.expertise && typeof updateData.expertise === 'string') {
+        updateData.expertise = updateData.expertise.split(',').map(item => item.trim());
     }
 
-    // even admin could not update other user's password or id
-    if (updateData.password || updateData.id) {
-        return next(new ErrorHandler('You cannot update other user\'s password or id', 403));
+    const user = await User.findById(id);
+    if (!user || user.role !== 'Teacher') {
+        return next(new ErrorHandler('Teacher not found', 404));
     }
 
     const updatedUser = await userService.updateUser(id, updateData);
-    if (!updatedUser) {
-        return next(new ErrorHandler('User not updated', 404));
-    }
 
     res.status(200).json({
         success: true,
@@ -155,45 +132,84 @@ export const updateTeacher = asyncHandler(async (req, res, next) => {
     });
 });
 
-
-
-
+// * Delete Teacher (Soft Delete)
 export const deleteTeacher = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
-    const user = await userService.getUserById(id);
+    const user = await User.findById(id);
+    if (!user || user.role !== 'Teacher') {
+        return next(new ErrorHandler('Teacher not found', 404));
+    }
+
+    user.isDeleted = true;
+    user.status = 'archived';
+    await user.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Teacher archived/deleted successfully'
+    });
+});
+
+// * Toggle User Status (Active / Suspended)
+export const toggleUserStatus = asyncHandler(async (req, res, next) => {
+    const { id } = req.params;
+    const { status } = req.body; // 'active' or 'suspended'
+
+    if (!['active', 'suspended', 'archived'].includes(status)) {
+        return next(new ErrorHandler('Invalid status specified', 400));
+    }
+
+    const user = await User.findById(id);
     if (!user) {
         return next(new ErrorHandler('User not found', 404));
     }
-    if (user.role !== 'Teacher') {
-        return next(new ErrorHandler('You are not authorized to delete this user', 403));
+
+    user.status = status;
+    await user.save();
+
+    res.status(200).json({
+        success: true,
+        message: `User status updated to ${status}`,
+        data: { user },
+    });
+});
+
+// * Get All Users (With Pagination, Search, Filter)
+export const getAllUsers = asyncHandler(async (req, res, next) => {
+    const { role, search, status, page = 1, limit = 50 } = req.query;
+
+    const query = { isDeleted: false, role: { $ne: 'Admin' } };
+    if (role) query.role = role;
+    if (status) query.status = status;
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+            { department: { $regex: search, $options: 'i' } }
+        ];
     }
 
-    await userService.deleteUser(id);
+    const users = await User.find(query)
+        .select('-password -resetPasswordToken -resetPasswordExpire')
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .skip((Number(page) - 1) * Number(limit));
+
+    const total = await User.countDocuments(query);
 
     res.status(200).json({
         success: true,
-        message: 'Teacher deleted successfully'
+        message: 'Users fetched successfully',
+        data: { users, total, page: Number(page), pages: Math.ceil(total / limit) },
     });
 });
 
-
-
-
-export const getAllUsers = asyncHandler(async (req, res, next) => {
-    const { users } = await userService.getAllUsers();
-
-    res.status(200).json({
-        success: true,
-        message: 'All users fetched successfully',
-        data: { users },
-    });
-});
-
-
-
-
+// * Get All Projects
 export const getAllProjects = asyncHandler(async (req, res, next) => {
-    const { projects } = await projectService.getAllProjects();
+    const projects = await Project.find({ isDeleted: false })
+        .populate('student', 'name email department avatar')
+        .populate('supervisor', 'name email department avatar')
+        .sort({ createdAt: -1 });
 
     res.status(200).json({
         success: true,
@@ -202,39 +218,93 @@ export const getAllProjects = asyncHandler(async (req, res, next) => {
     });
 });
 
+// * Admin Proposal Final Override Approval / Rejection
+export const reviewProposalAdmin = asyncHandler(async (req, res, next) => {
+    const { projectId } = req.params;
+    const { status, remarks } = req.body; // 'approved' or 'rejected'
 
-
-
-export const assignSupervisor = asyncHandler(async (req, res, next) => {
-    const { projectId, supervisorId } = req.body;
-    const adminId = req.user._id;
-
-    const admin = await User.findById(adminId);
-    if (!admin || !admin.role || admin.role !== 'Admin') {
-        return next(new ErrorHandler('You are not authorized to access this resource', 403));
-    }
-
-    const project = await projectService.getProjectById(projectId);
+    const project = await Project.findById(projectId);
     if (!project) {
         return next(new ErrorHandler('Project not found', 404));
     }
 
-    if (project.supervisor) {
-        return next(new ErrorHandler('Project already has a supervisor', 400));
+    project.status = status;
+    if (remarks) {
+        project.feedback.push({
+            supervisorId: req.user._id,
+            type: status === 'approved' ? 'positive' : 'negative',
+            title: `Admin Proposal Review (${status.toUpperCase()})`,
+            message: remarks,
+        });
+    }
+
+    await project.save();
+
+    await notificationService.notifyUser(
+        project.student,
+        `Admin updated your project proposal status to ${status}`,
+        status === 'approved' ? 'approval' : 'rejection',
+        '/student/project',
+        'high'
+    );
+
+    res.status(200).json({
+        success: true,
+        message: `Project proposal status set to ${status}`,
+        data: { project },
+    });
+});
+
+// * Admin Assign Supervisor Manually
+export const assignSupervisor = asyncHandler(async (req, res, next) => {
+    const { projectId, supervisorId } = req.body;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+        return next(new ErrorHandler('Project not found', 404));
+    }
+
+    if (project.status !== 'approved' && project.status !== 'assigned') {
+        return next(new ErrorHandler('Supervisors can only be assigned to approved projects', 400));
     }
 
     const supervisor = await User.findById(supervisorId);
-    if (!supervisor || !supervisor.role || supervisor.role !== 'Teacher' || supervisor.assignedStudents.length >= supervisor.maxStudents) {
-        return next(new ErrorHandler('cannot assign this supervisor', 400));
+    if (!supervisor || supervisor.role !== 'Teacher') {
+        return next(new ErrorHandler('Invalid teacher selected', 400));
     }
 
     project.supervisor = supervisorId;
     await project.save();
+
+    await User.findByIdAndUpdate(project.student, { supervisor: supervisorId });
+    await User.findByIdAndUpdate(supervisorId, { $addToSet: { assignedStudents: project.student } });
 
     res.status(200).json({
         success: true,
         message: 'Supervisor assigned successfully',
         data: { project },
     });
-})
+});
 
+// * Get Admin System Dashboard Analytics
+export const getAdminDashboardStats = asyncHandler(async (req, res, next) => {
+    const totalStudents = await User.countDocuments({ role: 'Student', isDeleted: false });
+    const totalTeachers = await User.countDocuments({ role: 'Teacher', isDeleted: false });
+    const totalProjects = await Project.countDocuments({ isDeleted: false });
+    const pendingProposals = await Project.countDocuments({ status: 'pending', isDeleted: false });
+    const approvedProjects = await Project.countDocuments({ status: 'approved', isDeleted: false });
+
+    res.status(200).json({
+        success: true,
+        message: 'Admin dashboard stats fetched successfully',
+        data: {
+            metrics: {
+                totalStudents,
+                totalTeachers,
+                totalProjects,
+                pendingProposals,
+                approvedProjects,
+            },
+        },
+    });
+});

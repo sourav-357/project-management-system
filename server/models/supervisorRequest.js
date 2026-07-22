@@ -1,10 +1,4 @@
-
-
-
-
 import mongoose from 'mongoose';
-
-
 
 const supervisorRequestSchema = new mongoose.Schema({
     student: {
@@ -29,19 +23,14 @@ const supervisorRequestSchema = new mongoose.Schema({
         enum: ['pending', 'approved', 'rejected'],
         default: 'pending'
     },
-}, { timestamps: true }
+}, { timestamps: true });
+
+// * Compound Indexes with Unique Constraints & Partial Filtering
+supervisorRequestSchema.index({ student: 1, supervisor: 1, status: 1 });
+supervisorRequestSchema.index(
+    { student: 1, supervisor: 1 },
+    { unique: true, partialFilterExpression: { status: 'pending' } } // Prevents duplicate pending requests to same teacher
 );
-
-
-
-// * indexing for better performance
-supervisorRequestSchema.index({ student: 1 });
-supervisorRequestSchema.index({ supervisor: 1 });
-supervisorRequestSchema.index({ status: 1 });
-
-
+supervisorRequestSchema.index({ supervisor: 1, status: 1, createdAt: -1 });
 
 export const SupervisorRequest = mongoose.models.SupervisorRequest || mongoose.model('SupervisorRequest', supervisorRequestSchema);
-
-
-
