@@ -117,12 +117,12 @@ export const GroupMeeting = () => {
 
     newSocket.on('removed_by_host', () => {
       alert('You were removed from the meeting by the host.');
-      leaveMeeting();
+      handleLeaveMeeting();
     });
 
     newSocket.on('meeting_ended_by_host', () => {
       alert('The meeting host has ended the conference.');
-      leaveMeeting();
+      handleLeaveMeeting();
     });
 
     setSocket(newSocket);
@@ -156,15 +156,15 @@ export const GroupMeeting = () => {
   const cleanupLocalMedia = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        track.stop();
         track.enabled = false;
+        track.stop();
       });
       localStreamRef.current = null;
     }
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => {
-        track.stop();
         track.enabled = false;
+        track.stop();
       });
       screenStreamRef.current = null;
     }
@@ -175,6 +175,11 @@ export const GroupMeeting = () => {
       socket.emit('leave_meeting_room', { meetingId });
       socket.disconnect();
     }
+  };
+
+  const handleLeaveMeeting = () => {
+    cleanupLocalMedia();
+    navigate('/meetings');
   };
 
   const toggleMute = () => {
@@ -523,7 +528,7 @@ export const GroupMeeting = () => {
         </button>
 
         <button
-          onClick={leaveMeeting}
+          onClick={handleLeaveMeeting}
           className="p-3 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg"
         >
           <PhoneOff className="w-5 h-5" />

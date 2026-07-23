@@ -91,6 +91,56 @@ export const initializeChatSockets = (io) => {
             }
         });
 
+        // WebRTC Call Signaling Handlers & Real-Time Chat Call Record Injection
+        socket.on('initiate_call', (data) => {
+            const { recipientId, callType, offer } = data;
+            io.to(recipientId).emit('incoming_call', {
+                caller: { _id: userId, name: socket.user.name, role: socket.user.role },
+                callType: callType || 'one_to_one_voice',
+                offer,
+            });
+        });
+
+        socket.on('answer_call', async (data) => {
+            const { callerId, answer, callType } = data;
+            io.to(callerId).emit('call_accepted', { answer });
+
+            // Automatically insert call record into chat stream when call is answered!
+            try {
+                const callText = callType === 'one_to_one_video' ? '📹 Video Call (Answered)' : '📞 Voice Call (Answered)';
+                const message = await Message.create({
+                    sender: userId,
+                    recipient: callerId,
+                    content: callText,
+                    isRead: true,
+                });
+
+                const populatedMessage = await Message.findById(message._id)
+                    .populate('reactions.user', 'name')
+                    .lean();
+
+                io.to(callerId).emit('receive_message', populatedMessage);
+                io.to(userId).emit('receive_message', populatedMessage);
+            } catch (err) {
+                console.error('Error logging call record to chat:', err);
+            }
+        });
+
+        socket.on('reject_call', (data) => {
+            const { callerId } = data;
+            io.to(callerId).emit('call_rejected');
+        });
+
+        socket.on('end_call', (data) => {
+            const { targetId } = data;
+            io.to(targetId).emit('call_ended');
+        });
+
+        socket.on('ice_candidate', (data) => {
+            const { targetId, candidate } = data;
+            io.to(targetId).emit('ice_candidate', { candidate });
+        });
+
         // Handler: Mark Messages as Read
         socket.on('mark_read', async (data) => {
             try {

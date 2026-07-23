@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { FolderKanban, CheckCircle2, AlertCircle, Check, History, Filter } from 'lucide-react';
+import { FolderKanban, CheckCircle2, AlertCircle, Check, History, Lock } from 'lucide-react';
 
 export const TeacherProposals = () => {
   const [projects, setProjects] = useState([]);
@@ -46,6 +46,21 @@ export const TeacherProposals = () => {
     }
   };
 
+  const handleCompleteProject = async (projectId, projectTitle) => {
+    if (!window.confirm(`Mark project "${projectTitle}" as COMPLETED? Once completed, this project is finalized into history, supervision is released, and the student can submit a new project proposal.`)) return;
+
+    setMsg('');
+    setError('');
+
+    try {
+      const res = await api.put(`/teacher/projects/${projectId}/complete`);
+      setMsg(res.data.message || 'Project marked as completed successfully. Supervision released.');
+      fetchProjects();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to complete project');
+    }
+  };
+
   const filteredProjects = projects.filter((proj) => {
     if (filterTab === 'Pending') return proj.status === 'submitted' || proj.status === 'pending' || proj.status === 'under_review';
     if (filterTab === 'Approved') return proj.status === 'approved' || proj.status === 'assigned' || proj.status === 'milestone_in_progress';
@@ -63,13 +78,13 @@ export const TeacherProposals = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Welcome Banner */}
+      {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 rounded-2xl p-6 text-white shadow-lg">
         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/10 text-indigo-200 text-[11px] font-semibold mb-2">
           <FolderKanban className="w-3.5 h-3.5" /> Proposal Evaluation & History
         </div>
         <h1 className="text-xl font-extrabold tracking-tight">Supervised Project Proposals</h1>
-        <p className="text-xs text-slate-300 mt-1">Review student proposals history (Approved, Pending, In Progress, Completed).</p>
+        <p className="text-xs text-slate-300 mt-1">Review student proposals, evaluate submissions, and mark finalized projects as completed.</p>
       </div>
 
       {msg && (
@@ -92,7 +107,7 @@ export const TeacherProposals = () => {
           <button
             key={tab}
             onClick={() => setFilterTab(tab)}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
+            className={`px-3.5 py-2 rounded-lg transition-all ${
               filterTab === tab
                 ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
@@ -141,6 +156,7 @@ export const TeacherProposals = () => {
                   {proj.description}
                 </div>
 
+                {/* ACTION BUTTONS BASED ON PROJECT STATUS */}
                 {canApprove && (
                   <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
@@ -149,6 +165,26 @@ export const TeacherProposals = () => {
                     >
                       Evaluate & Approve Proposal
                     </button>
+                  </div>
+                )}
+
+                {isApproved && (
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                      onClick={() => handleCompleteProject(proj._id, proj.title)}
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-1.5 active:scale-95"
+                    >
+                      <CheckCircle2 className="w-4 h-4" /> Mark Project as Completed
+                    </button>
+                  </div>
+                )}
+
+                {isCompleted && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-indigo-500" /> Project Finalized & Completed &bull; Read-Only Record
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Supervision Released</span>
                   </div>
                 )}
 

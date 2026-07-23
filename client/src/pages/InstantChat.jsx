@@ -232,7 +232,7 @@ export const InstantChat = () => {
       if (
         selectedFriend &&
         (msgData.sender === selectedFriend._id || msgData.recipient === selectedFriend._id ||
-         msgData.sender?._id === selectedFriend._id || msgData.recipient?._id === selectedFriend._id)
+          msgData.sender?._id === selectedFriend._id || msgData.recipient?._id === selectedFriend._id)
       ) {
         setMessages((prev) => {
           if (prev.some((m) => m._id === msgData._id)) return prev;
@@ -491,9 +491,8 @@ export const InstantChat = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* LEFT SIDEBAR: SLEEK COMPACT FRIENDS DIRECTORY (RESPONSIVE) */}
         <div
-          className={`w-full md:w-72 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-slate-50/50 dark:bg-slate-950/40 shrink-0 ${
-            selectedFriend ? 'hidden md:flex' : 'flex'
-          }`}
+          className={`w-full md:w-72 border-r border-slate-200 dark:border-slate-800 flex flex-col bg-slate-50/50 dark:bg-slate-950/40 shrink-0 ${selectedFriend ? 'hidden md:flex' : 'flex'
+            }`}
         >
           <div className="p-3 border-b border-slate-200 dark:border-slate-800 space-y-2">
             <div className="flex justify-between items-center">
@@ -514,11 +513,10 @@ export const InstantChat = () => {
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
-                  className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-all border ${
-                    roleFilter === r
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                  }`}
+                  className={`flex-1 py-1 text-[10px] font-bold rounded-md transition-all border ${roleFilter === r
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                    }`}
                 >
                   {r}
                 </button>
@@ -551,11 +549,10 @@ export const InstantChat = () => {
                 <button
                   key={friend._id}
                   onClick={() => setSelectedFriend(friend)}
-                  className={`w-full p-2.5 text-left flex items-center gap-2.5 transition-colors ${
-                    selectedFriend?._id === friend._id
-                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border-l-3 border-indigo-600'
-                      : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
-                  }`}
+                  className={`w-full p-2.5 text-left flex items-center gap-2.5 transition-colors ${selectedFriend?._id === friend._id
+                    ? 'bg-indigo-50 dark:bg-indigo-950/60 border-l-3 border-indigo-600'
+                    : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
+                    }`}
                 >
                   <div className="relative shrink-0">
                     <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-[11px] overflow-hidden">
@@ -592,9 +589,8 @@ export const InstantChat = () => {
 
         {/* RIGHT PANEL: SLEEK CHAT ROOM (RESPONSIVE) */}
         <div
-          className={`flex-1 flex flex-col bg-white dark:bg-slate-900 ${
-            !selectedFriend ? 'hidden md:flex' : 'flex'
-          }`}
+          className={`flex-1 flex flex-col bg-white dark:bg-slate-900 ${!selectedFriend ? 'hidden md:flex' : 'flex'
+            }`}
         >
           {selectedFriend ? (
             <>
@@ -706,6 +702,7 @@ export const InstantChat = () => {
                   messages.map((msg, index) => {
                     const isMine = msg.sender === user._id || msg.sender?._id === user._id;
                     const isMissedCall = msg.content?.includes('Missed');
+                    const isCallMsg = msg.content?.includes('Voice Call') || msg.content?.includes('Video Call');
 
                     const prevMsg = index > 0 ? messages[index - 1] : null;
                     const showDateHeader = !prevMsg || new Date(prevMsg.createdAt).toDateString() !== new Date(msg.createdAt).toDateString();
@@ -720,88 +717,96 @@ export const InstantChat = () => {
                           </div>
                         )}
 
-                        <div
-                          id={`msg-${msg._id}`}
-                          className={`flex flex-col group relative transition-all rounded-xl ${isMine ? 'items-end' : 'items-start'}`}
-                        >
-                          {/* Hover Quick Action Toolbar */}
-                          <div
-                            className={`hidden group-hover:flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5 shadow-md absolute -top-3 z-10 ${
-                              isMine ? 'right-0' : 'left-0'
-                            }`}
-                          >
-                            <button
-                              onClick={() => setReplyToMessage(msg)}
-                              className="p-0.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold flex items-center gap-0.5"
-                              title="Tag / Reply to message"
-                            >
-                              <Reply className="w-3 h-3" /> Reply
-                            </button>
-                            <div className="h-2.5 w-[1px] bg-slate-200 dark:bg-slate-700" />
-                            {EMOJIS.slice(0, 6).map((emoji) => (
-                              <button
-                                key={emoji}
-                                onClick={() => handleToggleEmoji(msg._id, emoji)}
-                                className="text-xs p-0.5 opacity-80 hover:opacity-100"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* SLEEK COMPACT MESSAGE BUBBLE */}
-                          <div
-                            className={`max-w-[85%] sm:max-w-[70%] px-3.5 py-2.5 rounded-xl text-xs space-y-1 shadow-sm transition-all ${
-                              isMissedCall
-                                ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-                                : isMine
-                                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-xs border border-indigo-500/20'
-                                : 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 rounded-tl-xs border border-slate-200/80 dark:border-slate-700/80'
-                            }`}
-                          >
-                            {/* TAGGED / REPLIED MESSAGE PREVIEW WITH JUMP CLICK */}
-                            {msg.replyTo && (
-                              <div
-                                onClick={() => handleJumpToMessage(msg.replyTo._id || msg.replyTo)}
-                                className={`p-2 rounded-lg text-[11px] mb-1 border-l-3 cursor-pointer hover:opacity-95 transition-all shadow-inner ${
-                                  isMine
-                                    ? 'bg-black/20 border-indigo-300 text-indigo-100'
-                                    : 'bg-slate-200/80 dark:bg-slate-700/80 border-indigo-500 text-slate-800 dark:text-slate-200'
-                                }`}
-                                title="Click to jump to tagged message"
-                              >
-                                <div className="flex items-center justify-between font-bold text-[10px]">
-                                  <span className="flex items-center gap-1">
-                                    <CornerDownRight className="w-2.5 h-2.5 text-indigo-400" />
-                                    {msg.replyTo.sender?.name || 'Tagged Message'}
-                                  </span>
-                                </div>
-                                <p className="truncate opacity-90 italic mt-0.5 text-[10px]">{msg.replyTo.content}</p>
-                              </div>
-                            )}
-
-                            <p className="leading-snug whitespace-pre-wrap font-medium">{msg.content}</p>
-
-                            <div
-                              className={`flex items-center justify-end gap-1 text-[9px] pt-0.5 ${
-                                isMine ? 'text-indigo-200' : 'text-slate-400'
-                              }`}
-                            >
-                              <span>
-                                {formatMessageTime(msg.createdAt)}
-                              </span>
-                              {isMine && !isMissedCall && (
-                                msg.isRead ? (
-                                  <CheckCheck className="w-3.5 h-3.5 text-sky-300 font-extrabold" title={`Read ${msg.readAt ? `at ${new Date(msg.readAt).toLocaleTimeString()}` : ''}`} />
-                                ) : (
-                                  <Check className="w-3.5 h-3.5 text-indigo-200" title="Sent (Unread)" />
-                                )
+                        {isCallMsg ? (
+                          <div className="flex justify-center my-2.5 w-full">
+                            <div className="px-4 py-1.5 bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200/80 dark:border-indigo-800/80 rounded-full text-indigo-800 dark:text-indigo-300 text-[11px] font-bold shadow-xs flex items-center gap-2">
+                              {msg.content.includes('Video') ? (
+                                <Video className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                              ) : (
+                                <Phone className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                               )}
+                              <span>{msg.content} &bull; {formatMessageTime(msg.createdAt)}</span>
                             </div>
                           </div>
+                        ) : (
+                          <div
+                            id={`msg-${msg._id}`}
+                            className={`flex flex-col group relative transition-all rounded-xl ${isMine ? 'items-end' : 'items-start'}`}
+                          >
+                            {/* Hover Quick Action Toolbar */}
+                            <div
+                              className={`hidden group-hover:flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5 shadow-md absolute -top-3 z-10 ${isMine ? 'right-0' : 'left-0'
+                                }`}
+                            >
+                              <button
+                                onClick={() => setReplyToMessage(msg)}
+                                className="p-0.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold flex items-center gap-0.5"
+                                title="Tag / Reply to message"
+                              >
+                                <Reply className="w-3 h-3" /> Reply
+                              </button>
+                              <div className="h-2.5 w-[1px] bg-slate-200 dark:bg-slate-700" />
+                              {EMOJIS.slice(0, 6).map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  onClick={() => handleToggleEmoji(msg._id, emoji)}
+                                  className="text-xs p-0.5 opacity-80 hover:opacity-100"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
 
-                          {msg.reactions && msg.reactions.length > 0 && (
-                            <div className="flex gap-1 mt-0.5">
+                            {/* SLEEK COMPACT MESSAGE BUBBLE */}
+                            <div
+                              className={`max-w-[85%] sm:max-w-[70%] px-3.5 py-2.5 rounded-xl text-xs space-y-1 shadow-sm transition-all ${isMissedCall
+                                ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                                : isMine
+                                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-xs border border-indigo-500/20'
+                                  : 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 rounded-tl-xs border border-slate-200/80 dark:border-slate-700/80'
+                                }`}
+                            >
+                              {/* TAGGED / REPLIED MESSAGE PREVIEW WITH JUMP CLICK */}
+                              {msg.replyTo && (
+                                <div
+                                  onClick={() => handleJumpToMessage(msg.replyTo._id || msg.replyTo)}
+                                  className={`p-2 rounded-lg text-[11px] mb-1 border-l-3 cursor-pointer hover:opacity-95 transition-all shadow-inner ${isMine
+                                    ? 'bg-black/20 border-indigo-300 text-indigo-100'
+                                    : 'bg-slate-200/80 dark:bg-slate-700/80 border-indigo-500 text-slate-800 dark:text-slate-200'
+                                    }`}
+                                  title="Click to jump to tagged message"
+                                >
+                                  <div className="flex items-center justify-between font-bold text-[10px]">
+                                    <span className="flex items-center gap-1">
+                                      <CornerDownRight className="w-2.5 h-2.5 text-indigo-400" />
+                                      {msg.replyTo.sender?.name || 'Tagged Message'}
+                                    </span>
+                                  </div>
+                                  <p className="truncate opacity-90 italic mt-0.5 text-[10px]">{msg.replyTo.content}</p>
+                                </div>
+                              )}
+
+                              <p className="leading-snug whitespace-pre-wrap font-medium">{msg.content}</p>
+
+                              <div
+                                className={`flex items-center justify-end gap-1 text-[9px] pt-0.5 ${isMine ? 'text-indigo-200' : 'text-slate-400'
+                                  }`}
+                              >
+                                <span>
+                                  {formatMessageTime(msg.createdAt)}
+                                </span>
+                                {isMine && !isMissedCall && (
+                                  msg.isRead ? (
+                                    <CheckCheck className="w-3.5 h-3.5 text-sky-300 font-extrabold" title={`Read ${msg.readAt ? `at ${new Date(msg.readAt).toLocaleTimeString()}` : ''}`} />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5 text-indigo-200" title="Sent (Unread)" />
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            {msg.reactions && msg.reactions.length > 0 && (
+                              <div className="flex gap-1 mt-0.5">
                               {msg.reactions.map((r, idx) => (
                                 <span
                                   key={idx}
@@ -813,7 +818,8 @@ export const InstantChat = () => {
                             </div>
                           )}
                         </div>
-                      </React.Fragment>
+                      )}
+                    </React.Fragment>
                     );
                   })
                 )}
