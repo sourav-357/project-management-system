@@ -1,269 +1,363 @@
-# 🎓 Academic FYP Governance & Real-Time Collaboration Platform
+# Academic FYP Governance & Real-Time Collaboration Platform
 
-An enterprise-grade, production-ready MERN monorepo platform designed for governing Final Year Academic Project (FYP) proposals, faculty supervisor allocation, milestone deliverables, real-time social networking, 1-on-1 instant messaging, and WebRTC peer-to-peer audio/video meetings.
+Production-grade MERN monorepo for governing Final Year Project (FYP) proposals, faculty supervisor allocation, milestone deliverables, social connections, real-time messaging, and WebRTC audio/video collaboration.
 
-Built to showcase senior MERN stack & backend engineering standards for **15–20+ LPA engineering roles**, featuring state-machine workflow state protection, atomic MongoDB concurrency write-locks, dual JWT refresh token rotation, WebRTC media stream cleanup, and full mobile-responsive UI aesthetics.
-
----
-
-## 📚 Table of Contents
-
-- [🌟 Core System Highlights](#-core-system-highlights)
-- [🔒 Account Provisioning & 0-User Auto-Seed System](#-account-provisioning--0-user-auto-seed-system)
-- [👥 Role-Based Workflows & Governance Matrix](#-role-based-workflows--governance-matrix)
-- [🔄 Project Proposal Lifecycle & Proposal History Rules](#-project-proposal-lifecycle--proposal-history-rules)
-- [💬 Real-Time Collaboration & Communication Engine](#-real-time-collaboration--communication-engine)
-- [🏗️ System Design & Architectural Defense for Interviewers](#-system-design--architectural-defense-for-interviewers)
-- [📁 Repository Monorepo Structure & File Links](#-repository-monorepo-structure--file-links)
-- [🛠️ Technology Stack & Dependencies Rationale](#️-technology-stack--dependencies-rationale)
-- [🚀 Quick Start & Installation](#-quick-start--installation)
-- [📝 Credentials for Testing](#-credentials-for-testing)
+Built for interview and production readiness: role-based access control, atomic MongoDB concurrency guards, dual JWT with refresh-token rotation, Socket.io real-time events, and WebRTC media lifecycle management.
 
 ---
 
-## 🌟 Core System Highlights
+## Table of Contents
 
-1. **Strict User Provisioning Model**: Public registration is disabled to maintain academic compliance. User accounts can **only** be created by System Admins.
-2. **Automated 0-User DB Seed**: Bootstraps 3 default demo accounts (Admin, Teacher, Student) automatically whenever MongoDB starts with zero users.
-3. **Single Active Project Rule & Historical Archive**: Students can maintain only **1 active ongoing project** at a time. All past rejected/completed proposals remain stored as non-editable historical records.
-4. **Supervisor Request Guard**: Students can request faculty supervisors **only** for proposals that are in **Approved** or **Accepted** status.
-5. **Real-Time WebRTC Media Cleanup**: Instant audio/video tracks are explicitly stopped (`track.stop()`) on call decline, end call, or tab exit—preventing hardware camera/microphone resource leaks.
-6. **Dual JWT Token Security**: 15-minute in-memory Access Tokens + 7-day `httpOnly` Refresh Tokens with automatic token rotation via Axios HTTP 401 interceptors.
-7. **Responsive UI & Constant Sticky Sidebar**: Layout stays fixed on desktop while featuring a smooth slide-over mobile drawer navigation on phone viewports.
-
----
-
-## 🔒 Account Provisioning & 0-User Auto-Seed System
-
-### Public Registration Guard
-To prevent unauthorized users from registering in an academic institution environment:
-- Public user registration is explicitly restricted.
-- Account creation is performed exclusively by **System Admins** through the **Admin User Directory** (`/admin/users`).
-
-### Automated Database Seed System (`server/config/seed.js`)
-When launching the application for the first time on a fresh database:
-1. The server checks the `User` collection.
-2. If total users count is **`0`**, it automatically seeds 3 pre-configured demo user accounts:
-
-| Role | Name | Email | Default Password | Department |
-| :--- | :--- | :--- | :--- | :--- |
-| **Admin** | System Admin | `admin@fyp.com` | `Admin@1234` | Computer Science |
-| **Teacher** | System Teacher | `teacher@fyp.com` | `Teacher@1234` | Computer Science |
-| **Student** | System Student | `student@fyp.com` | `Student@1234` | Computer Science |
+- [Why This System Exists](#why-this-system-exists)
+- [Account Provisioning & Auto-Seed](#account-provisioning--auto-seed)
+- [Role Capabilities](#role-capabilities)
+- [Project Proposal Lifecycle](#project-proposal-lifecycle)
+- [Supervisor Assignment Flow](#supervisor-assignment-flow)
+- [Connection Requests](#connection-requests)
+- [Chat, Calls & Meetings](#chat-calls--meetings)
+- [Authentication & Refresh Tokens](#authentication--refresh-tokens)
+- [System Design for Interviews](#system-design-for-interviews)
+- [Technology Stack](#technology-stack)
+- [Project Structure & Documentation Index](#project-structure--documentation-index)
+- [Quick Start](#quick-start)
+- [Default Credentials](#default-credentials)
 
 ---
 
-## 👥 Role-Based Workflows & Governance Matrix
+## Why This System Exists
+
+Academic institutions need a controlled environment where:
+
+- Only administrators provision student and faculty accounts (no open self-registration).
+- Each student maintains exactly one active project at a time, with full historical audit of past proposals.
+- Faculty capacity limits are enforced atomically when multiple students request the same supervisor.
+- Supervision, milestones, and deliverables follow a governed state machine—not ad-hoc file sharing.
+- Students and faculty can collaborate in real time (chat, calls, group meetings) without leaving the platform.
+
+This platform combines **academic governance** with **real-time collaboration** in a single deployable system.
+
+---
+
+## Account Provisioning & Auto-Seed
+
+### Public registration is disabled
+
+Students and teachers **cannot** create their own accounts.
+
+| Action | Who can do it |
+|--------|---------------|
+| Create Student account | Admin only (`POST /api/v1/admin/create-student`) |
+| Create Teacher account | Admin only (`POST /api/v1/admin/create-teacher`) |
+| Self-register as Student/Teacher | Blocked (403) |
+| Self-register as Admin | Allowed via `POST /api/v1/auth/register` (bootstrap path) |
+
+The frontend [`Register`](./client/src/pages/Register.jsx) page displays a restriction notice—there is no registration form for students or teachers.
+
+### Per-role auto-seed on first boot
+
+When the server connects to MongoDB, [`server/config/seed.js`](./server/config/seed.js) runs automatically. For **each role with zero active users**, one default account is created:
+
+| Role | Email | Password | Department |
+|------|-------|----------|------------|
+| Admin | `admin@university.edu` | `admin123456` | Administration |
+| Teacher | `teacher@university.edu` | `teacher123456` | Computer Science |
+| Student | `student@university.edu` | `student123456` | Computer Science |
+
+This means a completely empty database gets three ready-to-use demo accounts—one per role—without manual seed commands.
+
+---
+
+## Role Capabilities
+
+### Student
+
+| Capability | Route / Endpoint |
+|------------|------------------|
+| Submit and edit project proposal (draft/rejected only) | `/student/proposal` |
+| View proposal history (completed/rejected are read-only) | `/student/proposal` |
+| Browse teachers and request supervisor (approved proposals only) | `/student/supervisors` |
+| Upload milestone files (requires assigned supervisor) | `/student/documents` |
+| Submit milestone work | API: `POST /student/milestones/:id/submit` |
+| View teacher feedback | `/student/feedback` |
+| Send/receive connection requests | `/connections` |
+| Real-time chat with connected users | `/chat` |
+| Join group meetings, receive 1-on-1 calls | `/meetings` |
+| View academic deadlines | Dashboard + notifications |
+
+### Teacher
+
+| Capability | Route / Endpoint |
+|------------|------------------|
+| Review and approve/reject student proposals | `/teacher/proposals` |
+| Accept or decline supervisor requests (capacity-guarded) | `/teacher/requests` |
+| View and manage assigned students | `/teacher/students` |
+| Grade milestones and add structured feedback | `/teacher/milestones` |
+| Drop supervision of a student | API: `POST /teacher/students/:id/drop` |
+| Create academic deadlines | API: `POST /deadlines` |
+| Host group video meetings | `/meetings` |
+| Connections, chat, and 1-on-1 calls | `/connections`, `/chat` |
+
+### Admin
+
+| Capability | Route / Endpoint |
+|------------|------------------|
+| Create, update, soft-delete students and teachers | `/admin/users` |
+| Toggle user status (active / suspended / archived) | `/admin/users` |
+| View all platform projects | `/admin/projects` |
+| Override proposal review decisions | `/admin/projects` |
+| Manually assign supervisor to a project | API: `POST /admin/assign-supervisor` |
+| Platform metrics dashboard | `/admin/dashboard` |
+| All teacher capabilities (deadlines, meetings) | Shared routes |
+
+---
+
+## Project Proposal Lifecycle
+
+### Status state machine
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                            ACADEMIC WORKFLOW MATRIX                              │
-├───────────────────┼──────────────────────────────────────────────────────────────┤
-│ ROLE              │ PERMISSIONS & CAPABILITIES                                   │
-├───────────────────┼──────────────────────────────────────────────────────────────┤
-│ 👨‍🎓 Student        │ • Submit 1 active project proposal.                          │
-│                   │ • View proposal history (read-only for rejected/completed).  │
-│                   │ • Request supervisor for APPROVED proposals.                 │
-│                   │ • Upload milestone document deliverables.                    │
-│                   │ • Connect, chat, and voice/video call with connected users.  │
-├───────────────────┼──────────────────────────────────────────────────────────────┤
-│ 👩‍🏫 Teacher        │ • Review incoming supervisor allocation requests.            │
-│                   │ • Approve or Reject submitted student project proposals.     │
-│                   │ • Grade student milestone document submissions.              │
-│                   │ • Host group video meetings and conduct 1-on-1 calls.        │
-├───────────────────┼──────────────────────────────────────────────────────────────┤
-│ 🛡️ Admin          │ • Create student and teacher user accounts.                  │
-│                   │ • Toggle user status (Active / Suspended).                   │
-│                   │ • Global project overview and evaluation overrides.          │
-│                   │ • System performance & platform metrics dashboard.           │
-└───────────────────┴──────────────────────────────────────────────────────────────┘
+[draft] ──submit──> [submitted] ──review──> [approved] ──supervisor assigned──> [assigned] ──all milestones approved──> [completed]
+                         │                        │
+                         └──review──> [rejected] (historical, editable → resubmit)
 ```
 
+| Status | Meaning |
+|--------|---------|
+| `draft` | Student is editing; not yet submitted for review |
+| `submitted` | Awaiting teacher/admin review |
+| `approved` | Proposal accepted; student may request a supervisor |
+| `rejected` | Returned with feedback; student may edit and resubmit |
+| `assigned` | Supervisor linked to project |
+| `completed` | All milestones approved; project closed |
+
+### Key business rules
+
+1. **One active project per student** — enforced by a unique partial MongoDB index on `{ student: 1 }` where `isDeleted: false`.
+2. **Edit lock** — only `draft` or `rejected` proposals can be modified.
+3. **New proposal gate** — allowed only when no active project exists or the previous project is `completed`.
+4. **Supervisor request gate** — requires project status `approved` (or `assigned`).
+5. **File/milestone uploads** — blocked until a supervisor is assigned on the student account.
+6. **Completion** — when every milestone is `approved`, project status transitions to `completed`.
+
+### Who does what
+
+| Step | Actor | Action |
+|------|-------|--------|
+| 1. Create proposal | Student | Writes title, description, milestones; saves as draft or submits |
+| 2. Review proposal | Teacher or Admin | Approves or rejects with remarks |
+| 3. Request supervisor | Student | Sends request to a teacher (approved project only) |
+| 4. Accept supervision | Teacher | Accepts if under `maxStudents` capacity (atomic DB lock) |
+| 5. Submit milestones | Student | Uploads deliverables per milestone |
+| 6. Grade milestones | Teacher | Approves/rejects each milestone with feedback |
+| 7. Override (optional) | Admin | Can change review status or manually assign supervisor |
+
 ---
 
-## 🔄 Project Proposal Lifecycle & Proposal History Rules
-
-### Proposal Lifecycle States
-1. **Draft**: Student creates initial proposal draft.
-2. **Submitted**: Student submits proposal for evaluation.
-3. **Under Review**: Proposal is under evaluation by faculty supervisor or department admin.
-4. **Approved / Rejected**: Faculty or Admin accepts or rejects the proposal with feedback notes.
-5. **Assigned**: Student requests an approved teacher who accepts supervision.
-6. **Completed**: Project milestone deliverables completed and marked finished.
+## Supervisor Assignment Flow
 
 ```
- [Draft] ──> [Submitted] ──> [Under Review] ──> [Approved] ──> [Assigned] ──> [Completed]
-                  │                                  │
-                  └───> [Rejected] (Historical) ─────┘
+Student (approved project)
+    │
+    ▼
+POST /student/supervisor-request  ──>  SupervisorRequest (pending)
+    │
+    ▼
+Teacher reviews at /teacher/requests
+    │
+    ├── Accept ──> Atomic $addToSet on teacher.assignedStudents
+    │              Sets student.supervisor + project.supervisor
+    │
+    └── Reject ──> Request marked rejected; student may request another teacher
 ```
 
-### Proposal History Rules
-- **Active Project Isolation**: A student can only have **1 active ongoing project** (`draft`, `submitted`, `under_review`, `approved`).
-- **History View**: In the My Proposal workspace (`/student/proposal`), students can view their complete submission history.
-- **Edit Restrictions**: Earlier completed or rejected proposals are displayed as **read-only historical cards**. Only the current active project proposal can be modified.
+Capacity is enforced in [`server/services/teacherService.js`](./server/services/teacherService.js) using a single atomic `findOneAndUpdate`—no read-then-write race condition.
 
 ---
 
-## 💬 Real-Time Collaboration & Communication Engine
+## Connection Requests
 
-### 1. Network & Connections Engine (`/connections`)
-- **Connection Requests**: Send, accept, or decline connection requests.
-- **Filtered Explore Directory**: Hides already connected users, pending requests, and blocked users.
-- **Connection Management**: Clear chat history, remove connection, or directly block users from the chat header.
+Social graph between any authenticated users (all roles).
 
-### 2. 1-on-1 Instant Messaging (`/chat`)
-- **Socket.io WebSocket Delivery**: Low-latency instant delivery over port 3000.
-- **Offline Message Persistence**: Messages sent to offline users are stored in MongoDB and rendered upon re-login with unread badges.
-- **Interactive Features**: Emoji quick-reactions, tagged message jump navigation (smooth scroll & highlight glow), single-instance message rendering.
+```
+Explore users ──> Send request ──> Recipient accepts/rejects/blocks
+                                         │
+                    Accepted ────────────┴──> Appears in chat friends list
+                    Rejected ──────────────> 10-day cooldown before re-request
+                    Blocked ───────────────> Hidden from explore; no new requests
+```
 
-### 3. WebRTC Peer-to-Peer 1-on-1 Voice & Video Calls
-- Full WebRTC peer connection handling via Socket.io signaling.
-- **Hardened Track Teardown**: Invokes `track.stop()` on all audio/video tracks when calls end or decline to immediately free camera/microphone hardware.
-- **Missed Call Alerts**: Automatically inserts system missed call notifications in the chat stream and call history logs.
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /connections/explore` | Discover users (excludes connected, pending, blocked) |
+| `POST /connections/request` | Send connection request |
+| `PUT /connections/respond/:id` | Accept, reject, or block |
+| `GET /connections/pending` | Incoming and outgoing pending requests |
+| `DELETE /connections/remove/:targetUserId` | Remove existing connection |
 
-### 4. WebRTC Group Video Meetings (`/meetings`)
-- Multi-user video meetings powered by WebRTC mesh signaling.
-- **Host Controls**: Host can mute individual users, kick participants, or end meeting for all users.
-- In-meeting live text chat with message broadcasting.
+**Chat prerequisite:** only `accepted` connections appear in the chat friends list.
 
----
-
-## 🏗️ System Design & Architectural Defense for Interviewers
-
-### Q1: Why Dual JWT Tokens instead of basic sessions or single JWTs?
-> **Answer**: Single JWTs stored in LocalStorage leave apps vulnerable to XSS attacks. Basic sessions require database reads on every single HTTP request.
-> 
-> **Our Solution**:
-> - **Short-Lived Access Token (15 min)**: Kept in memory, minimizing exposure window if intercepted.
-> - **Long-Lived Refresh Token (7 days)**: Stored in an `httpOnly`, `SameSite=Strict` cookie, inaccessible to JavaScript XSS attacks.
-> - **Silent Refresh**: On HTTP 401 response, Axios interceptor seamlessly hits `/api/v1/auth/refresh-token`, obtains a fresh access token, and retries the request without forcing user re-login.
-
-### Q2: How does the system handle MongoDB race conditions during supervisor acceptance?
-> **Answer**: If multiple students request a supervisor with only 1 slot remaining, traditional read-then-write code creates race conditions.
-> 
-> **Our Solution**: We use **atomic MongoDB write-locks** in `teacherService.js`:
-> ```javascript
-> const updatedTeacher = await User.findOneAndUpdate(
->   {
->     _id: teacherId,
->     $expr: { $lt: [{ $size: "$assignedStudents" }, "$maxStudents"] }
->   },
->   { $addToSet: { assignedStudents: studentId } },
->   { new: true }
-> );
-> ```
-> If `assignedStudents` has reached `maxStudents`, the query fails atomically in MongoDB engine without race conditions.
-
-### Q3: How is hardware resource cleanup enforced for WebRTC calls?
-> **Answer**: Closing a WebRTC peer connection without stopping media tracks leaves camera/microphone indicator LEDs turned on in browsers.
-> 
-> **Our Solution**: In [CallModal.jsx](./client/src/components/CallModal.jsx), `cleanupCall()` explicitly iterates over all active tracks on the local stream:
-> ```javascript
-> if (localStreamRef.current) {
->   localStreamRef.current.getTracks().forEach(track => {
->     track.stop();
->     track.enabled = false;
->   });
->   localStreamRef.current = null;
-> }
-> ```
+Details: [server/controllers/README.md](./server/controllers/README.md) · [server/models/README.md](./server/models/README.md)
 
 ---
 
-## 📁 Repository Monorepo Structure & File Links
+## Chat, Calls & Meetings
+
+### 1-on-1 messaging (`/chat`)
+
+- REST for history, pagination, reactions, clear chat
+- Socket.io for real-time delivery, read receipts, emoji reactions
+- Offline messages persisted in MongoDB with unread badges on reconnect
+
+### 1-on-1 WebRTC calls
+
+- Signaling via Socket.io (`initiate_call`, `answer_call`, `ice_candidate`, `end_call`)
+- Missed/declined calls logged in chat and `CallHistory`
+- Media tracks explicitly stopped on hang-up to release camera/microphone hardware
+
+### Group meetings (`/meetings`)
+
+- Teachers and admins create meetings and invite users
+- WebRTC mesh with host controls: mute, remove participant, end for all
+- In-meeting text chat via Socket.io
+
+Details: [server/sockets/README.md](./server/sockets/README.md) · [client/src/pages/README.md](./client/src/pages/README.md)
+
+---
+
+## Authentication & Refresh Tokens
+
+### Token pair architecture
+
+| Token | Lifetime | Storage | Purpose |
+|-------|----------|---------|---------|
+| Access Token | 15 minutes | httpOnly cookie + in-memory on client | Authorize API requests |
+| Refresh Token | 7 days | httpOnly cookie (path-scoped) | Renew access token without re-login |
+
+### Why two tokens?
+
+- **Short access token** — limits damage if intercepted; kept in memory on the client.
+- **Long refresh token** — stored in `httpOnly`, `SameSite=Strict` cookie; JavaScript cannot read it (XSS-resistant).
+- **No session DB lookup on every request** — unlike server-side sessions, JWT access tokens are verified statelessly.
+
+### Refresh token rotation
+
+1. Client receives HTTP 401 (expired access token).
+2. Axios interceptor calls `POST /api/v1/auth/refresh-token` with the refresh cookie.
+3. Server verifies JWT, looks up SHA-256 hash in `RefreshToken` collection.
+4. Old refresh token is **revoked**; new pair is issued (rotation).
+5. If a revoked token is reused → **all user sessions revoked** (reuse detection).
+
+Implementation: [`client/src/api/axios.js`](./client/src/api/axios.js) · [`server/utils/generateToken.js`](./server/utils/generateToken.js)
+
+### Login requirements
+
+Login requires **email + password + role**. The role must match the stored user record—preventing a student from logging in through the teacher portal even with valid credentials.
+
+---
+
+## Technology Stack
+
+| Layer | Technology | Why |
+|-------|------------|-----|
+| Frontend | React 19 + Vite 8 | Fast HMR, modern component model |
+| Routing | React Router 7 | Declarative role-based route guards |
+| Styling | Tailwind CSS 4 | Utility-first responsive UI |
+| HTTP | Axios | Interceptors for silent token refresh |
+| Real-time | Socket.io Client 4 | Chat, call signaling, meetings |
+| Backend | Express 5 + Node.js | REST API + middleware pipeline |
+| Database | MongoDB + Mongoose 9 | Document store, indexes, atomic updates |
+| Auth | jsonwebtoken + bcrypt | JWT pair + password hashing |
+| Files | Multer + Cloudinary | Upload pipeline + persistent cloud storage |
+| Email | Nodemailer | Password reset flow |
+| Security | Helmet, mongo-sanitize, rate-limit | Headers, injection defense, abuse throttling |
+
+Full dependency breakdown: [client/README.md](./client/README.md) · [server/README.md](./server/README.md)
+
+---
+
+## Project Structure & Documentation Index
+
+All documentation links use **relative paths** so they resolve correctly on GitHub, GitLab, and local clones.
 
 ```
 project-management-system/
-├── [README.md](./README.md)                      # Root Documentation
-├── [INTERVIEW_QNA.md](./INTERVIEW_QNA.md)               # Senior MERN Interview Questions & Architecture Defense
+├── README.md                          ← You are here
 │
-├── 📁 server/                                 # Express.js & Socket.io Backend API
-│   ├── [README.md](./server/README.md)                # Backend Server Walkthrough & Route Table
-│   ├── [app.js](./server/app.js)                   # Express App Pipeline & Security Setup
-│   ├── [server.js](./server/server.js)                # HTTP Server Bootstrapper & Socket.io Setup
-│   ├── 📁 config/
-│   │   ├── [db.js](./server/config/db.js)             # MongoDB Mongoose Connection Setup
-│   │   └── [seed.js](./server/config/seed.js)         # Automatic 0-User Demo Data Bootstrap Script
-│   ├── 📁 models/                             # Mongoose Schemas & Compound Indexes
-│   │   ├── [README.md](./server/models/README.md)         # Schema Design & Indexing Defense
-│   │   ├── [user.js](./server/models/user.js)           # User Model with Role Enums
-│   │   ├── [project.js](./server/models/project.js)        # Project Proposal Schema & Feedback Array
-│   │   ├── [connection.js](./server/models/connection.js)     # Network Connections & Block List
-│   │   └── [message.js](./server/models/message.js)         # Chat Message Schema & Reactions
-│   ├── 📁 controllers/                        # REST Controllers
-│   │   ├── [README.md](./server/controllers/README.md)    # Controller Layer Walkthrough
-│   │   ├── [student.controller.js](./server/controllers/student.controller.js) # Proposal Submission & Supervisor Request
-│   │   ├── [teacher.controller.js](./server/controllers/teacher.controller.js) # Proposal Evaluation & Supervisees
-│   │   └── [admin.controller.js](./server/controllers/admin.controller.js)   # Admin Directory & Override Review
-│   ├── 📁 sockets/                            # Real-Time WebSocket Event Handlers
-│   │   ├── [chatSocket.js](./server/sockets/chatSocket.js)       # Instant Messaging & Reactions Socket
-│   │   └── [callSocket.js](./server/sockets/callSocket.js)       # WebRTC Call & Meeting Signals Socket
-│   └── 📁 middlewares/                        # Middleware Safeguards
-│       ├── [README.md](./server/middlewares/README.md)    # Auth & RBAC Security Defense
-│       └── [auth.middleware.js](./server/middlewares/auth.middleware.js) # JWT Auth Guard & Role Policy
+├── client/                            Frontend (React + Vite)
+│   ├── README.md
+│   └── src/
+│       ├── README.md
+│       ├── api/README.md
+│       ├── components/README.md
+│       ├── context/README.md
+│       └── pages/README.md
 │
-└── 📁 client/                                 # React + Vite + Tailwind Frontend
-    ├── [README.md](./client/README.md)                # Frontend Architecture Walkthrough
-    ├── [vite.config.js](./client/vite.config.js)           # Vite Config with Socket Proxy
-    └── 📁 src/
-        ├── [App.jsx](./client/src/App.jsx)                 # Router Setup & Layout Boundaries
-        ├── 📁 api/
-        │   └── [axios.js](./client/src/api/axios.js)         # Axios Instance & Silent Token Refresh
-        ├── 📁 components/
-        │   ├── [Navbar.jsx](./client/src/components/Navbar.jsx)       # Header & Theme Toggle
-        │   ├── [Sidebar.jsx](./client/src/components/Sidebar.jsx)      # Constant Sticky Sidebar & Mobile Drawer
-        │   └── [CallModal.jsx](./client/src/components/CallModal.jsx)    # WebRTC Call Interface & Track Releases
-        └── 📁 pages/
-            ├── [InstantChat.jsx](./client/src/pages/InstantChat.jsx)   # Instant Messaging & Call Directory
-            ├── [ProposalForm.jsx](./client/src/pages/ProposalForm.jsx)  # Proposal Submission & History View
-            ├── [TeacherProposals.jsx](./client/src/pages/TeacherProposals.jsx) # Faculty Proposal Review Hub
-            └── [UserManagement.jsx](./client/src/pages/UserManagement.jsx) # Admin User Account Creation
+└── server/                            Backend (Express + Socket.io)
+    ├── README.md
+    ├── config/README.md
+    ├── models/README.md
+    ├── controllers/README.md
+    ├── services/README.md
+    ├── middlewares/README.md
+    ├── router/README.md
+    ├── sockets/README.md
+    ├── validations/README.md
+    ├── utils/README.md
+    └── tests/README.md
 ```
 
+### Quick navigation
+
+| Document | Description |
+|----------|-------------|
+| [client/README.md](./client/README.md) | Frontend architecture, dev setup, page registry |
+| [server/README.md](./server/README.md) | Backend layers, full API tables, Socket events |
+| [server/models/README.md](./server/models/README.md) | All Mongoose schemas and relationships |
+| [server/controllers/README.md](./server/controllers/README.md) | HTTP handler responsibilities |
+| [server/services/README.md](./server/services/README.md) | Business logic and atomic operations |
+| [server/middlewares/README.md](./server/middlewares/README.md) | Auth, upload, error pipeline |
+| [server/router/README.md](./server/router/README.md) | Route mounting and RBAC per route |
+| [server/sockets/README.md](./server/sockets/README.md) | Real-time event catalog |
+| [server/config/README.md](./server/config/README.md) | DB connection, seed, Cloudinary |
+
 ---
 
-## 🛠️ Technology Stack & Dependencies Rationale
-
-| Category | Technology | Rationale & Selection Criteria |
-| :--- | :--- | :--- |
-| **Frontend Core** | React 18 + Vite | Fast HMR builds, component isolation, smooth rendering. |
-| **Styling** | Vanilla CSS + TailwindCSS | Modern utility styling, responsive grid flex layout, curated dark theme. |
-| **Real-Time Messaging** | Socket.io v4 | Low-latency WebSockets with automatic polling fallback and room isolation. |
-| **Media Calling** | WebRTC (simple-peer / Native) | Direct peer-to-peer browser video/audio streaming with minimal server bandwidth. |
-| **Backend Core** | Node.js + Express.js | Event-driven non-blocking I/O architecture suitable for async socket operations. |
-| **Database** | MongoDB + Mongoose | Flexible JSON-like document store with schemas, compound indexes, and atomic updates. |
-| **Security & Auth** | JsonWebToken + Cookie-Parser | Stateless Access Tokens coupled with secure HttpOnly Refresh Token storage. |
-| **Icons** | Lucide React | Lightweight SVG icons with native dark/light mode compatibility. |
-
----
-
-## 🚀 Quick Start & Installation
+## Quick Start
 
 ### Prerequisites
-- Node.js (v18 or higher)
-- MongoDB service running locally (`mongodb://localhost:27017/project_management`) or MongoDB Atlas connection string.
 
-### 1. Backend Server Setup
+- Node.js 18+
+- MongoDB (local or Atlas)
+
+### Backend
+
 ```bash
 cd server
+cp .env.example .env    # Set MONGO_URI, JWT secrets, optional Cloudinary keys
 npm install
-npm test          # Runs automated unit/integration tests
-npm run dev       # Launches Express & Socket.io server on http://localhost:3000
+npm test                # Run auth tests
+npm run dev             # http://localhost:3000
 ```
 
-### 2. Frontend Client Setup
+### Frontend
+
 ```bash
 cd client
+cp .env.example .env    # Set VITE_API_URL if needed
 npm install
-npm run build     # Validates Vite build
-npm run dev       # Launches Vite dev server on http://localhost:5173
+npm run dev             # http://localhost:5173 (proxies /api to :3000)
 ```
 
 ---
 
-## 📝 Credentials for Testing
+## Default Credentials
 
-Use these pre-seeded demo accounts (generated automatically on first boot):
-- **Admin**: `admin@fyp.com` / `Admin@1234`
-- **Teacher**: `teacher@fyp.com` / `Teacher@1234`
-- **Student**: `student@fyp.com` / `Student@1234`
+Auto-seeded on first boot (when no user exists for that role):
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@university.edu` | `admin123456` |
+| Teacher | `teacher@university.edu` | `teacher123456` |
+| Student | `student@university.edu` | `student123456` |
+
+Change these passwords before any production deployment.

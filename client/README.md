@@ -1,115 +1,146 @@
-# 🎨 Frontend Client Architecture - React 18 + Vite + Tailwind CSS
+# Frontend Client — React 19 + Vite 8 + Tailwind CSS 4
 
-The frontend client provides role-tailored workspaces for Students, Faculty Teachers, and System Admins. Built with React 18, Vite, Tailwind CSS, Socket.io client, and WebRTC peer connection handling.
+Role-tailored SPA for Students, Teachers, and Admins. Handles authentication session restoration, REST API communication with silent token refresh, Socket.io real-time events, and WebRTC peer connections for calls and meetings.
 
 ---
 
-## 📚 Table of Contents
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
 - [Directory Structure](#directory-structure)
-- [Axios Silent Token Refresh Architecture](#axios-silent-token-refresh-architecture)
-- [State Management & Context API](#state-management--context-api)
-- [Responsive Layout & Sidebar Architecture](#responsive-layout--sidebar-architecture)
-- [WebRTC Media Track Teardown Safety](#webrtc-media-track-teardown-safety)
-- [Component & Page Registry](#component--page-registry)
+- [Development Setup](#development-setup)
+- [Environment Variables](#environment-variables)
+- [Authentication Flow](#authentication-flow)
+- [Real-Time Features](#real-time-features)
+- [Build & Deploy](#build--deploy)
+- [Documentation Index](#documentation-index)
+
+---
+
+## Architecture Overview
+
+```
+Browser
+  │
+  ├── React Router 7          Role-based route guards (ProtectedRoute)
+  ├── AuthContext             Global session state (user, login, logout)
+  ├── Axios (api/axios.js)    REST calls + 401 → refresh → retry
+  ├── Socket.io Client        Chat, call signaling, meeting rooms
+  └── WebRTC (native)         1-on-1 calls + group meeting media
+```
+
+The Vite dev server proxies `/api` and `/socket.io` to `http://localhost:3000`, so the client always talks to the backend on a single origin during development.
 
 ---
 
 ## Directory Structure
 
 ```
-client/src/
-├── api/
-│   └── [axios.js](./src/api/axios.js)               # Axios instance with HTTP 401 token refresh
-├── context/
-│   └── [AuthContext.jsx](./src/context/AuthContext.jsx)        # Session state provider & logout handlers
-├── components/
-│   ├── [Navbar.jsx](./src/components/Navbar.jsx)             # Top header, dark theme toggle & profile badge
-│   ├── [Sidebar.jsx](./src/components/Sidebar.jsx)            # Sticky constant navigation & mobile drawer
-│   ├── [CallModal.jsx](./src/components/CallModal.jsx)          # 1-on-1 WebRTC Call Modal & Track release
-│   └── [ProtectedRoute.jsx](./src/components/ProtectedRoute.jsx)     # RBAC Route Guard
-└── pages/
-    ├── [LandingPage.jsx](./src/pages/LandingPage.jsx)        # Platform hero landing page
-    ├── [Login.jsx](./src/pages/Login.jsx)              # Authentication login form
-    ├── [InstantChat.jsx](./src/pages/InstantChat.jsx)        # Real-time instant messaging workspace
-    ├── [ProposalForm.jsx](./src/pages/ProposalForm.jsx)       # Student proposal editor & history
-    ├── [TeacherProposals.jsx](./src/pages/TeacherProposals.jsx)   # Faculty proposal review hub
-    ├── [UserManagement.jsx](./src/pages/UserManagement.jsx)     # Admin user directory & account creation
-    └── [GroupMeeting.jsx](./src/pages/GroupMeeting.jsx)       # WebRTC group video meeting hub
+client/
+├── README.md                 ← You are here
+├── index.html
+├── vite.config.js            Dev proxy + React plugin + Tailwind
+├── package.json
+├── .env.example
+├── public/
+│   └── icons.svg
+└── src/
+    ├── README.md             Source tree overview
+    ├── main.jsx              React DOM entry
+    ├── App.jsx               Router + layout shell
+    ├── App.css / index.css   Global styles
+    ├── api/
+    │   └── README.md         Axios instance & token refresh
+    ├── context/
+    │   └── README.md         AuthContext provider
+    ├── components/
+    │   └── README.md         Shared UI components
+    └── pages/
+        └── README.md         Route pages by role
 ```
 
 ---
 
-## Axios Silent Token Refresh Architecture
+## Development Setup
 
-Authentication state relies on a short-lived Access Token in memory and a long-lived `httpOnly` Refresh Token cookie.
-
-```
- Client (Axios)                 Express API Server
-       │                                 │
-       │─── 1. API Request (Expired) ───>│
-       │<── 2. HTTP 401 Unauthorized ────│
-       │                                 │
-       │─── 3. POST /auth/refresh-token >│
-       │<── 4. New Access Token ─────────│
-       │                                 │
-       │─── 5. Retry Original Request ──>│
-       │<── 6. HTTP 200 OK ──────────────│
+```bash
+cd client
+npm install
+npm run dev       # http://localhost:5173
 ```
 
-Implemented inside [axios.js](./src/api/axios.js):
-- On receiving HTTP 401, Axios intercepts the error.
-- Hits `/api/v1/auth/refresh-token` seamlessly in the background.
-- Updates the Access Token in memory and retries the failed API call automatically.
+Ensure the backend is running on port 3000 before testing authenticated routes or Socket.io features.
 
 ---
 
-## State Management & Context API
+## Environment Variables
 
-[AuthContext.jsx](./src/context/AuthContext.jsx) provides clean global user state management without extra Redux dependencies:
-- Stores `user` profile data, role permissions, and active session status.
-- Implements `login()`, `logout()`, and `refreshUser()` helper functions.
+Copy `.env.example` to `.env`:
 
----
-
-## Responsive Layout & Sidebar Architecture
-
-- **Sticky Constant Desktop Sidebar**: [Sidebar.jsx](./src/components/Sidebar.jsx) uses `sticky top-[65px] h-[calc(100vh-65px)]`. The navigation panel remains fixed while page content scrolls.
-- **Mobile Navigation Drawer**: Uses a responsive slide-over overlay backdrop drawer for phone viewports (`<768px`).
+| Variable | Purpose |
+|----------|---------|
+| `VITE_API_URL` | Backend base URL (defaults to proxied `/api/v1` in dev) |
 
 ---
 
-## WebRTC Media Track Teardown Safety
+## Authentication Flow
 
-In [CallModal.jsx](./src/components/CallModal.jsx):
-- Whenever a call finishes, is declined, or window unmounts, `cleanupCall()` iterates through local and remote media streams:
-```javascript
-stream.getTracks().forEach((track) => {
-  track.stop();
-  track.enabled = false;
-});
+1. User submits email, password, and role on `/login`.
+2. Server sets httpOnly cookies (access + refresh) and returns user JSON.
+3. `AuthContext` stores user in React state; access token held in memory via `axios.js`.
+4. On app load, `AuthContext` calls `/auth/refresh-token` to restore session from refresh cookie.
+5. On HTTP 401, Axios interceptor refreshes token silently and retries the failed request.
+
+Details: [src/api/README.md](./src/api/README.md) · [src/context/README.md](./src/context/README.md)
+
+---
+
+## Real-Time Features
+
+| Feature | Page | Transport |
+|---------|------|-----------|
+| Instant messaging | `/chat` | Socket.io + REST history |
+| 1-on-1 voice/video | `/chat` (CallModal) | WebRTC + Socket.io signaling |
+| Group meetings | `/meetings` | WebRTC mesh + Socket.io |
+| Notifications | Navbar drawer | REST polling |
+
+WebRTC cleanup: [src/components/README.md](./src/components/README.md)
+
+---
+
+## Build & Deploy
+
+```bash
+npm run build     # Output in dist/
+npm run preview   # Preview production build locally
 ```
-This guarantees that browser camera and microphone LEDs immediately turn off when calls end.
+
+For production, set `VITE_API_URL` to your deployed backend URL and configure CORS on the server to allow your frontend origin with credentials.
 
 ---
 
-## Component & Page Registry
+## Dependencies
 
-| Page / Component | Route | Role Access | Description |
-| :--- | :--- | :--- | :--- |
-| **LandingPage** | `/` | Public | Platform overview, features, and quick login links. |
-| **Login** | `/login` | Public | Form login for pre-seeded or admin-created accounts. |
-| **StudentDashboard** | `/student/dashboard` | Student | Overview of active project proposal and milestones. |
-| **ProposalForm** | `/student/proposal` | Student | Active proposal editor + non-editable historical project cards. |
-| **SupervisorSelector**| `/student/supervisors` | Student | View teachers & request supervision (Approved proposals only). |
-| **TeacherProposals** | `/teacher/proposals` | Teacher | Review student project proposals (Approve/Reject + remarks). |
-| **TeacherRequests** | `/teacher/requests` | Teacher | Manage incoming supervision requests (Accept/Decline). |
-| **UserManagement** | `/admin/users` | Admin | Account creation modal + user status toggle (Active/Suspended). |
-| **InstantChat** | `/chat` | All Roles | Real-time chat, emoji reactions, call history & connection tools. |
-| **GroupMeeting** | `/meetings` | All Roles | WebRTC group video meeting hub with host controls. |
+| Package | Version | Purpose |
+|---------|---------|---------|
+| react / react-dom | 19 | UI framework |
+| vite | 8 | Dev server, HMR, production bundler |
+| react-router-dom | 7 | Client-side routing |
+| tailwindcss | 4 | Utility-first CSS |
+| axios | 1.x | HTTP client with interceptors |
+| socket.io-client | 4 | WebSocket real-time transport |
+| lucide-react | 1.x | SVG icon library |
 
 ---
 
-## 🔗 Related Documentation Links
-- 🏠 [Root Project README](../README.md)
-- 🖥️ [Backend Server README](../server/README.md)
-- 📘 [Interview Q&A Guide](../INTERVIEW_QNA.md)
+## Documentation Index
+
+| Document | Description |
+|----------|-------------|
+| [../README.md](../README.md) | Root project overview |
+| [../server/README.md](../server/README.md) | Backend API reference |
+| [src/README.md](./src/README.md) | Source entry points |
+| [src/api/README.md](./src/api/README.md) | Axios & token refresh |
+| [src/context/README.md](./src/context/README.md) | AuthContext |
+| [src/components/README.md](./src/components/README.md) | Shared components |
+| [src/pages/README.md](./src/pages/README.md) | All route pages |
