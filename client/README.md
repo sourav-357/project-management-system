@@ -1,146 +1,37 @@
-# Frontend Client — React 19 + Vite 8 + Tailwind CSS 4
+# Client Application — React 19 + Vite 8 + Tailwind CSS 4
 
-Role-tailored SPA for Students, Teachers, and Admins. Handles authentication session restoration, REST API communication with silent token refresh, Socket.io real-time events, and WebRTC peer connections for calls and meetings.
-
----
-
-## Table of Contents
-
-- [Architecture Overview](#architecture-overview)
-- [Directory Structure](#directory-structure)
-- [Development Setup](#development-setup)
-- [Environment Variables](#environment-variables)
-- [Authentication Flow](#authentication-flow)
-- [Real-Time Features](#real-time-features)
-- [Build & Deploy](#build--deploy)
-- [Documentation Index](#documentation-index)
+Modern, responsive single-page frontend application powering the Academic FYP Governance Platform.
 
 ---
 
-## Architecture Overview
+## Technical Overview
 
-```
-Browser
-  │
-  ├── React Router 7          Role-based route guards (ProtectedRoute)
-  ├── AuthContext             Global session state (user, login, logout)
-  ├── Axios (api/axios.js)    REST calls + 401 → refresh → retry
-  ├── Socket.io Client        Chat, call signaling, meeting rooms
-  └── WebRTC (native)         1-on-1 calls + group meeting media
-```
-
-The Vite dev server proxies `/api` and `/socket.io` to `http://localhost:3000`, so the client always talks to the backend on a single origin during development.
+- **Framework**: React 19 built with Vite 8 for fast HMR.
+- **Styling**: Tailwind CSS 4 with custom dark/light theme tokens and modern glassmorphism UI elements.
+- **Icons**: Lucide React icon library.
+- **Routing**: React Router 7 with client-side role guards (`ProtectedRoute`).
+- **HTTP**: Axios instance with automated 401 interceptors for silent refresh token rotation.
+- **Real-Time**: Socket.io Client and WebRTC peer connection signaling.
 
 ---
 
-## Directory Structure
+## Page Registry
 
-```
-client/
-├── README.md                 ← You are here
-├── index.html
-├── vite.config.js            Dev proxy + React plugin + Tailwind
-├── package.json
-├── .env.example
-├── public/
-│   └── icons.svg
-└── src/
-    ├── README.md             Source tree overview
-    ├── main.jsx              React DOM entry
-    ├── App.jsx               Router + layout shell
-    ├── App.css / index.css   Global styles
-    ├── api/
-    │   └── README.md         Axios instance & token refresh
-    ├── context/
-    │   └── README.md         AuthContext provider
-    ├── components/
-    │   └── README.md         Shared UI components
-    └── pages/
-        └── README.md         Route pages by role
-```
-
----
-
-## Development Setup
-
-```bash
-cd client
-npm install
-npm run dev       # http://localhost:5173
-```
-
-Ensure the backend is running on port 3000 before testing authenticated routes or Socket.io features.
-
----
-
-## Environment Variables
-
-Copy `.env.example` to `.env`:
-
-| Variable | Purpose |
-|----------|---------|
-| `VITE_API_URL` | Backend base URL (defaults to proxied `/api/v1` in dev) |
-
----
-
-## Authentication Flow
-
-1. User submits email, password, and role on `/login`.
-2. Server sets httpOnly cookies (access + refresh) and returns user JSON.
-3. `AuthContext` stores user in React state; access token held in memory via `axios.js`.
-4. On app load, `AuthContext` calls `/auth/refresh-token` to restore session from refresh cookie.
-5. On HTTP 401, Axios interceptor refreshes token silently and retries the failed request.
-
-Details: [src/api/README.md](./src/api/README.md) · [src/context/README.md](./src/context/README.md)
-
----
-
-## Real-Time Features
-
-| Feature | Page | Transport |
-|---------|------|-----------|
-| Instant messaging | `/chat` | Socket.io + REST history |
-| 1-on-1 voice/video | `/chat` (CallModal) | WebRTC + Socket.io signaling |
-| Group meetings | `/meetings` | WebRTC mesh + Socket.io |
-| Notifications | Navbar drawer | REST polling |
-
-WebRTC cleanup: [src/components/README.md](./src/components/README.md)
-
----
-
-## Build & Deploy
-
-```bash
-npm run build     # Output in dist/
-npm run preview   # Preview production build locally
-```
-
-For production, set `VITE_API_URL` to your deployed backend URL and configure CORS on the server to allow your frontend origin with credentials.
-
----
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| react / react-dom | 19 | UI framework |
-| vite | 8 | Dev server, HMR, production bundler |
-| react-router-dom | 7 | Client-side routing |
-| tailwindcss | 4 | Utility-first CSS |
-| axios | 1.x | HTTP client with interceptors |
-| socket.io-client | 4 | WebSocket real-time transport |
-| lucide-react | 1.x | SVG icon library |
-
----
-
-## Documentation Index
-
-| Document | Description |
-|----------|-------------|
-| [../README.md](../README.md) | Root project overview |
-| [../server/README.md](../server/README.md) | Backend API reference |
-| [src/README.md](./src/README.md) | Source entry points |
-| [src/api/README.md](./src/api/README.md) | Axios & token refresh |
-| [src/context/README.md](./src/context/README.md) | AuthContext |
-| [src/components/README.md](./src/components/README.md) | Shared components |
-| [src/pages/README.md](./src/pages/README.md) | All route pages |
+| Page File | Route Path | Access Role | Description |
+|-----------|------------|-------------|-------------|
+| `Login.jsx` | `/login` | Public | Role-based authentication portal |
+| `Register.jsx` | `/register` | Public | Initial Admin bootstrap registration notice |
+| `StudentDashboard.jsx` | `/student/dashboard` | `Student` | Student governance home & lifecycle tracker |
+| `ProposalForm.jsx` | `/student/proposal` | `Student` | Proposal document builder & proposal history |
+| `SupervisorSelector.jsx` | `/student/supervisors` | `Student` | Faculty directory & supervision request dialog |
+| `StudentFiles.jsx` | `/student/documents` | `Student` | Deliverables document repository |
+| `TeacherDashboard.jsx` | `/teacher/dashboard` | `Teacher` | Faculty supervision portal & capacity meter |
+| `TeacherProposals.jsx` | `/teacher/proposals` | `Teacher` | Supervised proposals evaluation & project completion |
+| `TeacherRequests.jsx` | `/teacher/requests` | `Teacher` | Supervision & peer request inbox |
+| `AdminDashboard.jsx` | `/admin/dashboard` | `Admin` | System control panel & analytics metrics |
+| `UserManagement.jsx` | `/admin/users` | `Admin` | User directory table & account creator |
+| `ProjectManagement.jsx` | `/admin/projects` | `Admin` / `Teacher` | Global platform project board |
+| `Connections.jsx` | `/connections` | Authenticated | Peer network, explore directory & block list |
+| `MeetingsDashboard.jsx` | `/meetings` | Authenticated | Video meetings dashboard & instant room creator |
+| `GroupMeeting.jsx` | `/meetings/:meetingId` | Authenticated | WebRTC video conference room |
+| `ProfileSettings.jsx` | `/profile` | Authenticated | Avatar uploader, password change & session manager |

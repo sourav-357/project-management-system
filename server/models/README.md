@@ -1,197 +1,329 @@
-# Mongoose Models (`server/models/`)
+# Server Database Models & Schema Design Manual
 
-Database schemas, validation rules, indexes, and entity relationships for MongoDB.
+Technical reference guide for Mongoose models in `server/models/`.
 
 ---
 
-## Entity Relationship Diagram
+## 1. User Model (`server/models/user.js`)
 
+Represents all platform user identities (`Student`, `Teacher`, `Admin`).
+
+### Schema Definition & Fields
+
+```javascript
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Name is required'],
+      trim: true,
+      maxlength: [100, 'Name cannot exceed 100 characters'],
+    },
+    email: {
+      type: String,
+      required: [true, 'Email is required'],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      validate: [validator.isEmail, 'Please provide a valid email address'],
+    },
+    password: {
+      type: String,
+      required: [true, 'Password is required'],
+      minlength: [8, 'Password must be at least 8 characters'],
+      select: false, // Omitted from query results by default
+    },
+    role: {
+      type: String,
+      enum: ['Student', 'Teacher', 'Admin'],
+      required: [true, 'Role is required'],
+    },
+    department: {
+      type: String,
+      default: 'Computer Science',
+      trim: true,
+    },
+    avatar: {
+      type: String,
+      default: '',
+    },
+    status: {
+      type: String,
+      enum: ['active', 'suspended', 'archived'],
+      default: 'active',
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    // Faculty Specific Fields
+    assignedStudents: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    maxStudents: {
+      type: Number,
+      default: 5,
+    },
+    // Student Specific Fields
+    supervisor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    project: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Project',
+      default: null,
+    },
+  },
+  { timestamps: true }
+);
 ```
-User ──────────────> Project (student, supervisor refs)
-  │                      │
-  ├── assignedStudents   ├── milestones[] (embedded)
-  ├── supervisor         ├── feedback[] (embedded)
-  └── project            └── files[] (embedded)
 
-SupervisorRequest ──> student, supervisor (User refs)
-Connection ─────────> requester, recipient (User refs)
-Message ────────────> sender, recipient, replyTo (Message ref)
-Notification ───────> user (User ref)
-Deadline ───────────> createdBy, project (optional)
-Meeting ────────────> host, invitedUsers[]
-CallHistory ────────> host, participants[]
-RefreshToken ───────> user (User ref)
+### Methods & Middleware Hooks
+- **Pre-Save Hook**: Automatically hashes `password` using bcrypt with a salt factor of `10` whenever `isModified('password')` is true.
+- **`comparePassword(candidatePassword)`**: Instance method executing `bcrypt.compare` against the stored password hash.
+
+### Database Index Strategy
+- `{ email: 1 }` (Unique Index) — Guarantees zero duplicate email registrations at the MongoDB engine layer.
+- `{ role: 1, status: 1 }` (Compound Index) — Optimizes directory filtering and user queries.
+
+---
+
+## 2. Project Model (`server/models/project.js`)
+
+Governs proposal submissions, evaluations, milestone deliverables, and completion status.
+
+### Schema Definition & Fields
+
+```javascript
+export const PROJECT_STATUS = {
+  DRAFT: 'draft',
+  PENDING: 'pending',
+  SUBMITTED: 'submitted',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  ASSIGNED: 'assigned',
+  COMPLETED: 'completed',
+};
+
+const projectSchema = new mongoose.Schema(
+  {
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'Student is required'],
+    },
+    supervisor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    title: {
+      type: String,
+      required: [true, 'Project title is required'],
+      trim: true,
+      maxlength: [200, 'Title cannot exceed 200 characters'],
+    },
+    description: {
+      type: String,
+      required: [true, 'Project description is required'],
+      trim: true,
+      maxlength: [2000, 'Description cannot exceed 2000 characters'],
+    },
+    status: {
+      type: String,
+      enum: Object.values(PROJECT_STATUS),
+      default: PROJECT_STATUS.PENDING,
+    },
+    isDraft: {
+      type: Boolean,
+      default: false,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    files: [
+      {
+        fileType: { type: String, required: true },
+        fileUrl: { type: String, required: true },
+        originalName: { type: String, required: true },
+        size: { type: Number, default: 0 },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
+    feedback: [
+      {
+        supervisorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        type: { type: String, enum: ['positive', 'negative', 'general'], default: 'general' },
+        title: { type: String, required: true, trim: true },
+        message: { type: String, required: true, trim: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+  },
+  { timestamps: true }
+);
 ```
 
----
-
-## Model Registry
-
-### User — [user.js](./user.js)
-
-Core identity model for all platform actors.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| name, email, password | String | Email unique; password bcrypt-hashed |
-| role | Enum | `Student`, `Teacher`, `Admin` |
-| department | String | Academic department |
-| status | Enum | `active`, `suspended`, `archived` |
-| avatar | String | Cloudinary URL |
-| supervisor | ObjectId → User | Student's assigned teacher |
-| assignedStudents | [ObjectId → User] | Teacher's supervisees |
-| project | ObjectId → Project | Current active project ref |
-| maxStudents | Number | Teacher capacity (default 5) |
-| expertise | [String] | Teacher specializations |
-| isDeleted | Boolean | Soft delete flag |
-
-**Indexes:** `{ email: 1 }` unique; `{ role, status, isDeleted }` compound
+### Database Index Strategy
+- **Partial Unique Index**:
+  ```javascript
+  projectSchema.index(
+    { student: 1 },
+    { 
+      unique: true, 
+      partialFilterExpression: { 
+        isDeleted: false, 
+        status: { $nin: ['completed', 'rejected'] } 
+      } 
+    }
+  );
+  ```
+  - Enforces that a student can only have **one** active project in non-finalized status. Allows multiple historical completed/rejected records.
+- `{ supervisor: 1, status: 1, isDeleted: 1 }` — Optimizes faculty supervision query execution.
+- `{ status: 1, createdAt: -1 }` — Speeds up platform dashboard listing queries.
 
 ---
 
-### Project — [project.js](./project.js)
+## 3. Connection Model (`server/models/connection.js`)
 
-Student FYP proposal and lifecycle container.
+Manages peer network connections, pending applications, and block lists.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| student | ObjectId → User | Required owner |
-| supervisor | ObjectId → User | Assigned faculty |
-| title, description | String | Proposal content |
-| status | Enum | `draft`, `pending`, `submitted`, `approved`, `rejected`, `assigned`, `completed` |
-| milestones | [Embedded] | title, dueDate, status, submissionUrl, teacherFeedback |
-| feedback | [Embedded] | supervisorId, message, createdAt |
-| files | [Embedded] | name, url, size, uploadedAt |
-| isDeleted | Boolean | Soft delete |
+### Schema Definition & Fields
 
-**Indexes:** Partial unique `{ student: 1 }` where `isDeleted: false` — enforces one active project per student
+```javascript
+const connectionSchema = new mongoose.Schema(
+  {
+    requester: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    recipient: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'rejected', 'blocked'],
+      default: 'pending',
+    },
+    cooldownUntil: {
+      type: Date,
+      default: null,
+    },
+  },
+  { timestamps: true }
+);
+```
 
----
-
-### SupervisorRequest — [supervisorRequest.js](./supervisorRequest.js)
-
-Workflow record when a student requests faculty supervision.
-
-| Field | Notes |
-|-------|-------|
-| student, supervisor | User refs |
-| status | `pending`, `accepted`, `rejected` |
-| message | Optional student note |
-
----
-
-### Connection — [connection.js](./connection.js)
-
-Social graph between users.
-
-| Field | Notes |
-|-------|-------|
-| requester, recipient | User refs |
-| status | `pending`, `accepted`, `rejected`, `blocked` |
-| blockedBy | User ref (who initiated block) |
-| rejectedAt | Timestamp for 10-day cooldown |
-
-**Indexes:** Unique `{ requester, recipient }`
+### Database Index Strategy
+- `{ requester: 1, recipient: 1 }` (Compound Unique Index) — Prevents duplicate connection records between the same pair of users.
 
 ---
 
-### Message — [message.js](./message.js)
+## 4. Meeting Model (`server/models/meeting.js`)
 
-1-on-1 chat messages.
+Manages video conference room instances and participant invitations.
 
-| Field | Notes |
-|-------|-------|
-| sender, recipient | User refs |
-| content | Max 2000 characters |
-| isRead, readAt | Read receipt tracking |
-| replyTo | Message ref (threading) |
-| reactions | [{ emoji, userId }] — 6 supported emojis |
+### Schema Definition & Fields
 
----
+```javascript
+const meetingSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: [true, 'Meeting title is required'],
+      trim: true,
+      maxlength: [200, 'Title cannot exceed 200 characters'],
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    host: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    invitedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    status: {
+      type: String,
+      enum: ['scheduled', 'active', 'ended'],
+      default: 'scheduled',
+    },
+    startedAt: { type: Date, default: null },
+    endedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+```
 
-### Notification — [notification.js](./notification.js)
-
-In-app notification records.
-
-| Field | Notes |
-|-------|-------|
-| user | Recipient |
-| type | Event category (connection, proposal, milestone, etc.) |
-| message, link | Display content and navigation target |
-| isRead | Read flag |
-
----
-
-### Deadline — [deadline.js](./deadline.js)
-
-Academic deadlines set by teachers/admins.
-
-| Field | Notes |
-|-------|-------|
-| title, dueDate | Deadline info |
-| createdBy | Teacher or Admin |
-| project | Optional project association |
-
----
-
-### Meeting — [meeting.js](./meeting.js)
-
-Group video meeting sessions.
-
-| Field | Notes |
-|-------|-------|
-| title, roomId | Meeting identity |
-| host | Teacher or Admin |
-| invitedUsers | Participant list |
-| status | `active`, `ended` |
-| startedAt, endedAt | Timestamps |
+### Database Index Strategy
+- `{ host: 1, status: 1 }` — Speeds up meeting queries by host and room state.
+- `{ invitedUsers: 1 }` — Optimizes user invitation dashboard lookup queries.
 
 ---
 
-### CallHistory — [callHistory.js](./callHistory.js)
+## 5. Message Model (`server/models/message.js`)
 
-1-on-1 WebRTC call records.
+Direct chat message documents between users.
 
-| Field | Notes |
-|-------|-------|
-| host, participants | User refs |
-| callType | `audio` or `video` |
-| status | `completed`, `declined`, `missed` |
-| duration | Seconds (if completed) |
+### Schema Definition & Fields
 
----
+```javascript
+const messageSchema = new mongoose.Schema(
+  {
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    content: { type: String, required: true, trim: true },
+    isRead: { type: Boolean, default: false },
+    reactions: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        emoji: { type: String, required: true },
+      },
+    ],
+  },
+  { timestamps: true }
+);
+```
 
-### RefreshToken — [refreshToken.js](./refreshToken.js)
-
-Persistent refresh token store for rotation and reuse detection.
-
-| Field | Notes |
-|-------|-------|
-| user | Token owner |
-| tokenHash | SHA-256 of raw refresh token |
-| isRevoked | Set true on rotation or logout |
-| ipAddress, userAgent | Session metadata |
-| expiresAt | TTL index for auto-cleanup |
-
----
-
-## Indexing Strategy (Interview Focus)
-
-| Index | Why |
-|-------|-----|
-| User email unique | O(1) login lookup |
-| Project student partial unique | Database-enforced business rule |
-| Connection requester+recipient unique | Prevent duplicate requests |
-| RefreshToken tokenHash | Fast rotation lookup |
-| RefreshToken expiresAt TTL | Automatic expired token cleanup |
+### Database Index Strategy
+- `{ sender: 1, recipient: 1, createdAt: -1 }` (Compound Index) — Ensures fast conversation retrieval and unread message count queries.
 
 ---
 
-## Documentation Index
+## 6. Refresh Token Model (`server/models/refreshToken.js`)
 
-| Document | Description |
-|----------|-------------|
-| [../README.md](../README.md) | Backend overview |
-| [../../README.md](../../README.md) | Root project workflows |
-| [../services/README.md](../services/README.md) | Business logic using these models |
-| [../controllers/README.md](../controllers/README.md) | HTTP handlers |
+Persists SHA-256 refresh token hashes for session security and token rotation.
+
+### Schema Definition & Fields
+
+```javascript
+const refreshTokenSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    tokenHash: { type: String, required: true, unique: true },
+    expiresAt: { type: Date, required: true },
+    isRevoked: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+```
+
+### Database Index Strategy
+- `{ tokenHash: 1 }` (Unique Index) — Speeds up token validation during refresh requests.
+- `{ expiresAt: 1 }` (TTL Index) — Automatically removes expired token documents from MongoDB.

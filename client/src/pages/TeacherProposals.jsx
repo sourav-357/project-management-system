@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { 
   FolderKanban, CheckCircle2, AlertCircle, Check, History, Lock, 
-  Search, ShieldCheck, UserCheck, FileText, Sparkles, Clock
+  Search, ShieldCheck, UserCheck, FileText, Sparkles, Clock, Award
 } from 'lucide-react';
 
 export const TeacherProposals = () => {
@@ -109,7 +109,7 @@ export const TeacherProposals = () => {
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Supervised Proposals</h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Evaluate student project submissions, approve proposals, and finalize completed projects to release supervision capacity.
+              Evaluate student project submissions, approve proposals, and mark projects as completed.
             </p>
           </div>
 
@@ -195,14 +195,14 @@ export const TeacherProposals = () => {
                 key={proj._id} 
                 className={`bg-white dark:bg-slate-900 p-6 rounded-3xl border ${
                   isCompleted 
-                    ? 'border-indigo-100 dark:border-indigo-950/60 bg-gradient-to-br from-white via-slate-50/30 to-indigo-50/10 dark:from-slate-900 dark:to-indigo-950/20' 
+                    ? 'border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10' 
                     : 'border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
                 } shadow-sm transition-all duration-200 space-y-4`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/50 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0">
-                      {proj.student?.name ? proj.student.name.substring(0, 2).toUpperCase() : 'ST'}
+                    <div className={`w-10 h-10 rounded-2xl ${isCompleted ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800' : 'bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/50 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400'} flex items-center justify-center font-bold text-sm shrink-0`}>
+                      {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : proj.student?.name ? proj.student.name.substring(0, 2).toUpperCase() : 'ST'}
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">{proj.title}</h3>
@@ -215,15 +215,15 @@ export const TeacherProposals = () => {
 
                   <span
                     className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider self-start sm:self-auto ${
-                      isApproved
+                      isCompleted
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
+                        : isApproved
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : isCompleted
-                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                         : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                     }`}
                   >
-                    {isCompleted ? <Lock className="w-3 h-3" /> : isApproved ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                    {proj.status}
+                    {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : isApproved ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                    {isCompleted ? 'Completed' : proj.status}
                   </span>
                 </div>
 
@@ -247,7 +247,7 @@ export const TeacherProposals = () => {
                   <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <button
                       onClick={() => handleCompleteProject(proj._id, proj.title)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-bold text-xs rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-2xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
                     >
                       <CheckCircle2 className="w-4 h-4" /> Mark Project as Completed
                     </button>
@@ -255,12 +255,12 @@ export const TeacherProposals = () => {
                 )}
 
                 {isCompleted && (
-                  <div className="p-3.5 bg-indigo-50/40 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-indigo-500 shrink-0" />
-                      <span>Project Finalized & Completed &bull; Locked Read-Only Record</span>
+                  <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Project Completed & Archived &bull; Supervision Released</span>
                     </span>
-                    <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-full">Supervision Released</span>
+                    <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider px-3 py-1 bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 rounded-full">Read-Only</span>
                   </div>
                 )}
 

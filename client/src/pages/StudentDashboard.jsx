@@ -357,25 +357,26 @@ export const StudentDashboard = () => {
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <History className="w-4 h-4 text-emerald-500" /> My Completed Projects History ({completedCount})
+              <Award className="w-4 h-4 text-emerald-500" /> Completed Projects History ({completedCount})
             </h3>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-              Read-Only Records
+            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-3 py-1 rounded-full border border-emerald-300 dark:border-emerald-800 uppercase tracking-wider">
+              Archived & Read-Only
             </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {projectsHistory.filter(p => p.status === 'completed').map((p) => (
-              <div key={p._id} className="p-4 bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700/80 space-y-2">
-                <div className="flex justify-between items-start">
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{p.title}</h4>
-                  <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold rounded-full flex items-center gap-1 shrink-0">
-                    <Lock className="w-3 h-3" /> Completed
+              <div key={p._id} className="p-5 bg-emerald-50/30 dark:bg-emerald-950/20 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 space-y-3 shadow-xs">
+                <div className="flex justify-between items-start gap-2">
+                  <h4 className="text-xs font-extrabold text-slate-900 dark:text-slate-100">{p.title}</h4>
+                  <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 text-[10px] font-extrabold rounded-full flex items-center gap-1 shrink-0 border border-emerald-300 dark:border-emerald-800">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Completed
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2">{p.description}</p>
-                <div className="text-[10px] text-slate-400 font-semibold pt-1">
-                  Supervisor: {p.supervisor ? p.supervisor.name : 'Completed'} &bull; {new Date(p.createdAt).toLocaleDateString()}
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">{p.description}</p>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold pt-2 border-t border-emerald-100 dark:border-emerald-900/40 flex justify-between items-center">
+                  <span>Supervisor: <strong className="text-slate-700 dark:text-slate-300">{p.supervisor ? p.supervisor.name : 'Completed'}</strong></span>
+                  <span>{new Date(p.updatedAt || p.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             ))}

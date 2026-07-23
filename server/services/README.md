@@ -1,124 +1,112 @@
-# Services (`server/services/`)
+# Server Services Module Reference & Technical Handbook
 
-Business logic layer. Encapsulates domain operations, complex MongoDB queries, atomic updates, and external integrations. Controllers call services; services call models.
+The `services` layer encapsulates domain business logic, data transformation pipelines, complex aggregation queries, and atomic concurrency controls.
 
----
-
-## Service Registry
-
-### userService.js
-
-User directory and profile operations.
-
-- Paginated user listing with search filters
-- User status transitions with validation
-- Profile field updates with duplicate email checks
+Separating business logic from controllers into dedicated service modules ensures DRY code reuse, testability, and centralized transactional security.
 
 ---
 
-### projectService.js
+## 1. Teacher Service (`server/services/teacherService.js`)
 
-Project lifecycle management.
+Governs faculty supervisor allocations, atomic capacity locks, request acceptances, and project completion releases.
 
-- Create proposal with one-active-project enforcement
-- Status transitions with edit-lock validation (draft/rejected only)
-- Milestone submission and completion detection
-- When all milestones are `approved` → project status becomes `completed`
-- Proposal history retrieval (active + past projects)
+### Service Routines
 
----
+#### `acceptSupervisorRequest(requestId, teacherId)`
+- **Purpose**: Processes a student's supervision application and links student/teacher accounts.
+- **Concurrency Security**: Implements atomic capacity verification directly in MongoDB write commands to prevent race conditions when concurrent requests arrive:
+  ```javascript
+  const teacher = await User.findOneAndUpdate(
+    {
+      _id: teacherId,
+      role: 'Teacher',
+      $expr: { $lt: [{ $size: '$assignedStudents' }, '$maxStudents'] }
+    },
+    { $addToSet: { assignedStudents: request.student } },
+    { new: true }
+  );
 
-### teacherService.js
+  if (!teacher) {
+    throw new ErrorHandler('Teacher has reached maximum supervision capacity', 400);
+  }
+  ```
+- **Operations Executed**:
+  1. Finds `SupervisorRequest` document matching `requestId`.
+  2. Executes conditional atomic `findOneAndUpdate` on `User` collection checking `$size: '$assignedStudents' < '$maxStudents'`.
+  3. Updates `request.status = 'accepted'`.
+  4. Links `student.supervisor = teacherId`.
+  5. Updates `project.supervisor = teacherId` and sets `project.status = 'assigned'`.
+- **Returns**: Updated request document.
 
-Faculty supervision with **atomic concurrency protection**.
+#### `completeProjectService(projectId, teacherId)`
+- **Purpose**: Marks an approved project as **Completed**, unlinks active student supervision, and releases faculty capacity.
+- **Operations Executed**:
+  ```javascript
+  // 1. Mark project as completed
+  const project = await Project.findById(projectId);
+  if (!project) throw new ErrorHandler('Project not found', 404);
 
-#### acceptSupervisorRequestAtomic
+  project.status = 'completed';
+  await project.save();
 
-Prevents supervisor overbooking when multiple students accept simultaneously:
+  // 2. Unlink student active supervision references
+  await User.findByIdAndUpdate(project.student, {
+    supervisor: null,
+    project: null
+  });
 
-```javascript
-const updatedTeacher = await User.findOneAndUpdate(
-  {
-    _id: teacherId,
-    $expr: { $lt: [{ $size: "$assignedStudents" }, "$maxStudents"] }
-  },
-  { $addToSet: { assignedStudents: studentId } },
-  { new: true }
-);
-```
-
-If capacity is full, the query returns `null`—no partial state. This is a key interview talking point for MongoDB atomic operations vs. read-modify-write races.
-
-Also handles:
-- Setting `student.supervisor` and `project.supervisor` on acceptance
-- Rejecting requests with notification
-- Dropping supervision (removes from assignedStudents, clears supervisor ref)
-
----
-
-### requestService.js
-
-SupervisorRequest workflow helpers.
-
-- Create request with duplicate-pending guard
-- Validate project is in approved state before request
-- Status updates and notification triggers
-
----
-
-### fileService.js
-
-File upload pipeline with cloud/local fallback.
-
-| Environment | Storage |
-|-------------|---------|
-| Production (Cloudinary configured) | Cloudinary CDN |
-| Development (no credentials) | `server/uploads/` local disk |
-
-Functions:
-- `uploadProjectFile` — student deliverables to `academic_platform/projects/<projectId>/`
-- `uploadAvatar` — profile images
-- `deleteFile` — remove from storage
-- Validates file types and size limits
-
-**Why Cloudinary:** Cloud platforms use ephemeral filesystems. Files uploaded to local disk are lost on container restart. Cloudinary provides persistent, CDN-backed storage.
+  // 3. Release faculty capacity
+  await User.findByIdAndUpdate(teacherId, {
+    $pull: { assignedStudents: project.student }
+  });
+  ```
+- **Impact**:
+  - The completed project and its deliverables become permanently locked as a read-only historical record.
+  - The student's active references are cleared to `null`, enabling them to submit a brand new proposal.
+  - The teacher's `assignedStudents` array is updated (`$pull`), freeing up capacity for new students.
+- **Returns**: Completed project document.
 
 ---
 
-### emailService.js
+## 2. Project Service (`server/services/projectService.js`)
 
-Transactional email via Nodemailer.
+Governs proposal submissions, draft revisions, file attachment metadata, and proposal query listings.
 
-- Password reset emails with 15-minute token links
-- Uses HTML templates from [utils/emailTemplates.js](../utils/emailTemplates.js)
-- Graceful failure if SMTP not configured (logs warning, doesn't crash)
+### Service Routines
 
----
+#### `createOrUpdateProposalService(studentId, { title, description, isDraft })`
+- **Purpose**: Creates a new proposal or updates an existing draft/rejected proposal.
+- **Validation**: Enforces database partial unique index checks. Ensures active proposals (`submitted`, `approved`, `assigned`, `completed`) cannot be modified.
+- **Returns**: Project document.
 
-### notificationService.js
-
-Centralized notification creation.
-
-- Called by controllers/services after state changes
-- Creates `Notification` documents with type, message, and navigation link
-- Used for: connection requests, proposal reviews, supervisor responses, milestone grades
+#### `getStudentProjectService(studentId)`
+- **Purpose**: Returns active project along with array of historic completed/rejected proposal records.
+- **Returns**: `{ project, projectsHistory }`.
 
 ---
 
-## Service Layer Principles
+## 3. User Service (`server/services/userService.js`)
 
-1. **Single responsibility** — each service owns one domain area
-2. **Atomic writes** — use `findOneAndUpdate` with conditions, not read-then-write
-3. **No HTTP concerns** — services return data or throw errors; no `res.json()`
-4. **Reusable** — same service functions callable from multiple controllers
+Governs user directory search, administrative account provisioning, pagination, status toggling, and soft deletion.
+
+### Service Routines
+
+#### `getAllUsersService({ page, limit, role, search, status })`
+- **Purpose**: Builds dynamic regex query matching name, email, or department, and executes paginated Mongoose query.
+- **Returns**: `{ users, total, totalPages, currentPage }`.
+
+#### `createUserAccountService(userData, role)`
+- **Purpose**: Validates email format, checks for duplicate email, hashes password with bcrypt, and creates User record.
+- **Returns**: User document.
 
 ---
 
-## Documentation Index
+## 4. File Service (`server/services/fileService.js`)
 
-| Document | Description |
-|----------|-------------|
-| [../models/README.md](../models/README.md) | Data schemas |
-| [../controllers/README.md](../controllers/README.md) | HTTP handlers |
-| [../config/cloudinary.js](../config/cloudinary.js) | Cloudinary config |
-| [../../README.md](../../README.md) | Root project (concurrency Q&A) |
+Processes local storage file writes and Cloudinary media uploads.
+
+### Service Routines
+
+#### `uploadToCloudinaryService(fileBuffer, folderPath)`
+- **Purpose**: Streams file buffer to Cloudinary cloud storage and returns secure HTTPS asset URL.
+- **Returns**: `{ secure_url, public_id }`.

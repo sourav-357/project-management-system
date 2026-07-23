@@ -1,103 +1,46 @@
-# Route Pages (`src/pages/`)
+# Client Pages Module Reference
 
-One React component per major view. Each page maps to a route defined in [App.jsx](../App.jsx).
-
----
-
-## Public Pages
-
-| Page | Route | File | Description |
-|------|-------|------|-------------|
-| Landing | `/` | [LandingPage.jsx](./LandingPage.jsx) | Platform hero, feature highlights, login links |
-| Login | `/login` | [Login.jsx](./Login.jsx) | Email + password + role selector |
-| Register | `/register` | [Register.jsx](./Register.jsx) | **Restriction notice only** — no signup form |
-| Forgot Password | `/forgot-password` | [ForgotPassword.jsx](./ForgotPassword.jsx) | Sends reset email |
-| Reset Password | `/reset-password` | [ResetPassword.jsx](./ResetPassword.jsx) | Sets new password from email token |
+Detailed breakdown of all user-facing dashboard and management pages.
 
 ---
 
-## Student Pages
+## Component Index
 
-| Page | Route | File | Description |
-|------|-------|------|-------------|
-| Dashboard | `/student/dashboard` | [StudentDashboard.jsx](./StudentDashboard.jsx) | Project status, milestones, deadlines |
-| Proposal | `/student/proposal` | [ProposalForm.jsx](./ProposalForm.jsx) | Create/edit proposal + read-only history |
-| Supervisors | `/student/supervisors` | [SupervisorSelector.jsx](./SupervisorSelector.jsx) | Browse teachers, send supervisor request |
-| Documents | `/student/documents` | [StudentFiles.jsx](./StudentFiles.jsx) | Upload/download project files |
-| Feedback | `/student/feedback` | [StudentFeedback.jsx](./StudentFeedback.jsx) | View teacher feedback on project |
-| Profile | `/student/profile` | [ProfileSettings.jsx](./ProfileSettings.jsx) | Avatar, password change |
+### 1. `StudentDashboard.jsx`
+Student home workspace featuring greeting hero banner, 4-stage project governance lifecycle status bar (0% to 100%), metric cards, quick action tiles, and completed project history drawer.
 
----
+### 2. `ProposalForm.jsx`
+Document proposal builder supporting proposal title and abstract entry, active project lock notices, and historical proposal drawer with quick "Create New Proposal" trigger.
 
-## Teacher Pages
+### 3. `SupervisorSelector.jsx`
+Faculty selection directory displaying available teachers with expertise tags, department info, capacity meters (`assignedStudents.length / maxStudents`), and supervision request dialog.
 
-| Page | Route | File | Description |
-|------|-------|------|-------------|
-| Dashboard | `/teacher/dashboard` | [TeacherDashboard.jsx](./TeacherDashboard.jsx) | Supervisee stats, pending items |
-| Requests | `/teacher/requests` | [TeacherRequests.jsx](./TeacherRequests.jsx) | Accept/decline supervisor requests |
-| Students | `/teacher/students` | [SupervisedStudents.jsx](./SupervisedStudents.jsx) | Assigned students and their projects |
-| Proposals | `/teacher/proposals` | [TeacherProposals.jsx](./TeacherProposals.jsx) | Review approve/reject proposals |
-| Milestones | `/teacher/milestones` | [TeacherMilestones.jsx](./TeacherMilestones.jsx) | Grade milestone submissions |
-| Profile | `/teacher/profile` | [ProfileSettings.jsx](./ProfileSettings.jsx) | Shared profile settings |
+### 4. `StudentFiles.jsx`
+Document repository supporting drag-and-drop file selector, file type icons, download triggers, and read-only lock banner when project is completed.
 
----
+### 5. `TeacherDashboard.jsx`
+Faculty portal featuring supervision capacity gauge, pending request metrics, and supervisee directory table with drop supervision action.
 
-## Admin Pages
+### 6. `TeacherProposals.jsx`
+Supervised proposals evaluation desk with filter tabs (All, Pending, Approved, Completed), evaluation remarks drawer, and "Mark Project as Completed" lock action.
 
-| Page | Route | File | Description |
-|------|-------|------|-------------|
-| Dashboard | `/admin/dashboard` | [AdminDashboard.jsx](./AdminDashboard.jsx) | Platform metrics |
-| Users | `/admin/users` | [UserManagement.jsx](./UserManagement.jsx) | Create/edit/suspend students and teachers |
-| Projects | `/admin/projects` | [ProjectManagement.jsx](./ProjectManagement.jsx) | All projects, override review, assign supervisor |
-| Profile | `/admin/profile` | [ProfileSettings.jsx](./ProfileSettings.jsx) | Shared profile settings |
+### 7. `TeacherRequests.jsx`
+Supervision and peer request inbox displaying student department context, request notes, and accept/decline action controls.
 
----
+### 8. `AdminDashboard.jsx`
+System governance panel featuring student and faculty metrics, total proposals count, approval conversion gauge, and global system overview.
 
-## Shared Pages (All Roles)
+### 9. `UserManagement.jsx`
+Paginated user directory table with live search, role filters, account status switches (`active`/`suspended`), CSV export, and student/teacher provisioning modals.
 
-| Page | Route | File | Description |
-|------|-------|------|-------------|
-| Connections | `/connections` | [Connections.jsx](./Connections.jsx) | Explore, request, accept, block users |
-| Chat | `/chat` | [InstantChat.jsx](./InstantChat.jsx) | Real-time messaging, reactions, 1-on-1 calls |
-| Meetings List | `/meetings` | [MeetingsDashboard.jsx](./MeetingsDashboard.jsx) | Active and past group meetings |
-| Meeting Room | `/meetings/:id` | [GroupMeeting.jsx](./GroupMeeting.jsx) | WebRTC group video + in-meeting chat |
+### 10. `ProjectManagement.jsx`
+Global platform project board displaying all proposals, supervisor assignment modals, and completed read-only cards.
 
----
+### 11. `Connections.jsx`
+Peer networking hub with tabs for My Connections, Explore Network, Pending Requests, and History/Blocked directory with direct message shortcuts.
 
-## Key User Flows by Page
+### 12. `MeetingsDashboard.jsx`
+Video conference dashboard displaying active calls and simple "Start Meeting" modal.
 
-### ProposalForm (Student)
-
-1. Student fills title, description, milestones
-2. Saves as `draft` or submits as `submitted`
-3. Rejected proposals become editable; completed ones appear as read-only history cards
-4. Only one active project allowed at a time
-
-### SupervisorSelector (Student)
-
-- Enabled only when project status is `approved`
-- Lists teachers with available capacity (`assignedStudents < maxStudents`)
-- Sends `SupervisorRequest`; teacher responds on TeacherRequests page
-
-### UserManagement (Admin)
-
-- **Only place** to create student and teacher accounts
-- Modal forms for create/edit with department, expertise, maxStudents
-- Status toggle: active → suspended → archived
-
-### InstantChat (All Roles)
-
-- Friends list populated from accepted connections only
-- Socket.io for live messages; REST for history pagination
-- CallModal launched from chat header for voice/video
-
----
-
-## Documentation Index
-
-| Document | Description |
-|----------|-------------|
-| [../components/README.md](../components/README.md) | Shared UI components |
-| [../../README.md](../../README.md) | Client package overview |
-| [../../../README.md](../../../README.md) | Root project workflows |
-| [../../../server/router/README.md](../../../server/router/README.md) | API endpoints these pages call |
+### 13. `ProfileSettings.jsx`
+User account card featuring avatar image uploader, password update form, and active session termination manager.

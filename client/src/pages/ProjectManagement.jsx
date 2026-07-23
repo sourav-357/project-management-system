@@ -222,7 +222,7 @@ export const ProjectManagement = () => {
                 key={proj._id} 
                 className={`bg-white dark:bg-slate-900 p-6 rounded-3xl border ${
                   isCompleted
-                    ? 'border-indigo-100 dark:border-indigo-950/60 bg-gradient-to-br from-white via-slate-50/20 to-indigo-50/10 dark:from-slate-900 dark:to-indigo-950/20'
+                    ? 'border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10'
                     : 'border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
                 } shadow-sm transition-all duration-200 space-y-4`}
               >
@@ -239,18 +239,18 @@ export const ProjectManagement = () => {
                   </div>
 
                   <span
-                    className={`inline-flex items-center gap-1 px-3.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider self-start sm:self-auto ${
-                      proj.status === 'approved' || proj.status === 'assigned'
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider self-start sm:self-auto ${
+                      proj.status === 'completed'
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
+                        : proj.status === 'approved' || proj.status === 'assigned'
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : proj.status === 'completed'
-                        ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                         : proj.status === 'rejected'
                         ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                         : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                     }`}
                   >
-                    {isCompleted && <Lock className="w-3 h-3" />}
-                    {proj.status}
+                    {isCompleted && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    {isCompleted ? 'Completed' : proj.status}
                   </span>
                 </div>
 
@@ -259,12 +259,12 @@ export const ProjectManagement = () => {
                 </div>
 
                 {isCompleted ? (
-                  <div className="p-3 bg-indigo-50/40 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between">
+                    <span className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>Completed Project Archive &bull; Immutable Read-Only Record</span>
                     </span>
-                    <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-full">Finalized</span>
+                    <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider px-3 py-1 bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 rounded-full">Finalized</span>
                   </div>
                 ) : (
                   /* Actions Bar */
