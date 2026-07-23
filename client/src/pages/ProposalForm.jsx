@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import {
-  FileText, Save, Send, AlertCircle, CheckCircle2, Plus, Trash2, History, RotateCcw, Award, Sparkles
+  FileText, Send, AlertCircle, CheckCircle2, History, Award, Sparkles, Lock
 } from 'lucide-react';
 
 export const ProposalForm = () => {
   const [projectId, setProjectId] = useState(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState('draft');
-  const [milestones, setMilestones] = useState([
-    { title: 'Requirement Analysis & SRS', description: 'Complete detailed SRS document', dueDate: '' },
-    { title: 'System Design & Architecture', description: 'Create ER Diagrams, API contracts', dueDate: '' },
-  ]);
+  const [status, setStatus] = useState('');
 
   const [projectsHistory, setProjectsHistory] = useState([]);
   const [selectedHistoryProject, setSelectedHistoryProject] = useState(null);
@@ -39,18 +35,9 @@ export const ProposalForm = () => {
         setProjectId(activeProj._id);
         setTitle(activeProj.title || '');
         setDescription(activeProj.description || '');
-        setStatus(activeProj.status || 'draft');
-        if (activeProj.milestones && activeProj.milestones.length > 0) {
-          setMilestones(
-            activeProj.milestones.map((m) => ({
-              title: m.title || '',
-              description: m.description || '',
-              dueDate: m.dueDate ? m.dueDate.split('T')[0] : '',
-            }))
-          );
-        }
+        setStatus(activeProj.status || '');
       } else {
-        // No active project or current project completed -> Reset form for new submission
+        // No active non-finalized project -> Reset form for fresh proposal submission
         resetFormForNewProject();
       }
     } catch (err) {
@@ -64,58 +51,28 @@ export const ProposalForm = () => {
     setProjectId(null);
     setTitle('');
     setDescription('');
-    setStatus('draft');
-    setMilestones([
-      { title: 'Requirement Analysis & SRS', description: 'Complete detailed SRS document', dueDate: '' },
-      { title: 'System Design & Architecture', description: 'Create ER Diagrams, API contracts', dueDate: '' },
-    ]);
+    setStatus('');
     setSelectedHistoryProject(null);
   };
 
-  const handleAddMilestone = () => {
-    setMilestones([
-      ...milestones,
-      { title: '', description: '', dueDate: '' },
-    ]);
-  };
-
-  const handleRemoveMilestone = (index) => {
-    setMilestones(milestones.filter((_, idx) => idx !== index));
-  };
-
-  const handleMilestoneChange = (index, field, value) => {
-    const updated = [...milestones];
-    updated[index][field] = value;
-    setMilestones(updated);
-  };
-
-  const handleSubmit = async (isDraft = false) => {
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
     setError('');
     setMessage('');
 
     if (!title.trim() || !description.trim()) {
-      setError('Title and description are required');
+      setError('Please write down the project title and detailed description.');
       return;
     }
-
-    const validMilestones = milestones
-      .filter((m) => m.title.trim() !== '')
-      .map((m) => ({
-        title: m.title.trim(),
-        description: m.description.trim(),
-        dueDate: m.dueDate ? new Date(m.dueDate) : new Date(Date.now() + 30 * 86400000),
-      }));
 
     setLoading(true);
     try {
       const res = await api.post('/student/project-proposal', {
         projectId,
-        title,
-        description,
-        isDraft,
-        milestones: validMilestones,
+        title: title.trim(),
+        description: description.trim(),
       });
-      setMessage(res.data.message);
+      setMessage(res.data.message || 'Project proposal submitted successfully');
       fetchProjects();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit proposal');
@@ -128,8 +85,10 @@ export const ProposalForm = () => {
     setSelectedHistoryProject(proj);
   };
 
-  const isEditable = status === 'draft' || status === 'rejected';
   const isCompleted = status === 'completed';
+  const isRejected = status === 'rejected';
+  const isOngoing = status === 'submitted' || status === 'pending' || status === 'approved' || status === 'assigned' || status === 'milestone_in_progress' || status === 'under_review';
+  const isEditable = !selectedHistoryProject && !isCompleted && !isRejected && !isOngoing;
 
   if (fetching) {
     return (
@@ -139,24 +98,44 @@ export const ProposalForm = () => {
     );
   }
 
+  const latestRejected = projectsHistory.length > 0 && projectsHistory[0].status === 'rejected';
+
   return (
     <div className="max-w-5xl space-y-6">
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Project Proposal & History Directory</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Submit proposal roadmaps, track past completed projects, and edit active drafts.</p>
+          <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Project Proposal Submission</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Submit project proposal details and track proposal history.</p>
         </div>
 
-        {(isCompleted || selectedHistoryProject) && (
+        {(isCompleted || isRejected || selectedHistoryProject) && (!isOngoing || selectedHistoryProject) && (
           <button
             onClick={resetFormForNewProject}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0"
           >
-            <Sparkles className="w-4 h-4" /> Start New Project Proposal
+            <Sparkles className="w-4 h-4" /> Start New Proposal
           </button>
         )}
       </div>
+
+      {isOngoing && !selectedHistoryProject && (
+        <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-indigo-900 dark:text-indigo-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>
+              <strong>Project Proposal Locked:</strong> Your project proposal is currently active ({status}). You cannot edit this proposal or create a new project proposal while an ongoing project exists.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {latestRejected && !selectedHistoryProject && !title && (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>Your previous project proposal was rejected. Please write down and submit a new proposal below.</span>
+        </div>
+      )}
 
       {message && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
@@ -177,7 +156,7 @@ export const ProposalForm = () => {
         <div className="flex justify-between items-center pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              {selectedHistoryProject ? 'Viewing Historical Record' : 'Active Proposal Status'}
+              {selectedHistoryProject ? 'Historical Record (Read-Only)' : status ? 'Active Proposal Status (Read-Only)' : 'New Proposal Form'}
             </span>
             {isCompleted && (
               <span className="px-2.5 py-0.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1">
@@ -186,17 +165,19 @@ export const ProposalForm = () => {
             )}
           </div>
 
-          <span
-            className={`text-xs font-bold px-3 py-1 rounded-lg uppercase ${
-              (selectedHistoryProject ? selectedHistoryProject.status : status) === 'approved' || (selectedHistoryProject ? selectedHistoryProject.status : status) === 'completed'
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                : (selectedHistoryProject ? selectedHistoryProject.status : status) === 'rejected'
-                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-            }`}
-          >
-            {selectedHistoryProject ? selectedHistoryProject.status : status}
-          </span>
+          {(selectedHistoryProject || status) && (
+            <span
+              className={`text-xs font-bold px-3 py-1 rounded-lg uppercase ${
+                (selectedHistoryProject ? selectedHistoryProject.status : status) === 'approved' || (selectedHistoryProject ? selectedHistoryProject.status : status) === 'completed'
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                  : (selectedHistoryProject ? selectedHistoryProject.status : status) === 'rejected'
+                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                  : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+              }`}
+            >
+              {selectedHistoryProject ? selectedHistoryProject.status : status}
+            </span>
+          )}
         </div>
 
         <div>
@@ -205,7 +186,7 @@ export const ProposalForm = () => {
             type="text"
             value={selectedHistoryProject ? selectedHistoryProject.title : title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={!!selectedHistoryProject || !isEditable}
+            disabled={!isEditable}
             placeholder="e.g. AI-Powered Academic Workflow Platform using Distributed Microservices"
             className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
           />
@@ -214,108 +195,25 @@ export const ProposalForm = () => {
         <div>
           <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">Detailed Project Abstract & Description</label>
           <textarea
-            rows={5}
+            rows={6}
             value={selectedHistoryProject ? selectedHistoryProject.description : description}
             onChange={(e) => setDescription(e.target.value)}
-            disabled={!!selectedHistoryProject || !isEditable}
-            placeholder="Describe the problem statement, technical stack, architecture, expected deliverables, and methodology..."
+            disabled={!isEditable}
+            placeholder="Write down the problem statement, technical stack, architecture, expected deliverables, and methodology..."
             className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 leading-relaxed"
           ></textarea>
         </div>
 
-        {/* Dynamic Milestones Section */}
-        <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Project Milestones & Deliverables Roadmap</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Key development milestones and completion roadmap.</p>
-            </div>
-
-            {!selectedHistoryProject && isEditable && (
-              <button
-                type="button"
-                onClick={handleAddMilestone}
-                className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold text-xs rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900 flex items-center gap-1 transition-all"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add Milestone
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            {(selectedHistoryProject ? selectedHistoryProject.milestones || [] : milestones).map((m, idx) => (
-              <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700 space-y-3 relative">
-                {!selectedHistoryProject && isEditable && milestones.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveMilestone(idx)}
-                    className="absolute top-3 right-3 p-1 text-slate-400 hover:text-rose-600 rounded-lg"
-                    title="Remove milestone"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Milestone Title #{idx + 1}</label>
-                    <input
-                      type="text"
-                      disabled={!!selectedHistoryProject || !isEditable}
-                      value={m.title || ''}
-                      onChange={(e) => handleMilestoneChange(idx, 'title', e.target.value)}
-                      placeholder="e.g. SRS & System Architecture Specification"
-                      className="w-full p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 disabled:opacity-60"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Due Date</label>
-                    <input
-                      type="date"
-                      disabled={!!selectedHistoryProject || !isEditable}
-                      value={m.dueDate ? m.dueDate.split('T')[0] : ''}
-                      onChange={(e) => handleMilestoneChange(idx, 'dueDate', e.target.value)}
-                      className="w-full p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 disabled:opacity-60"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Milestone Description & Scope</label>
-                  <input
-                    type="text"
-                    disabled={!!selectedHistoryProject || !isEditable}
-                    value={m.description || ''}
-                    onChange={(e) => handleMilestoneChange(idx, 'description', e.target.value)}
-                    placeholder="Brief description of deliverables for this milestone..."
-                    className="w-full p-2.5 bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 disabled:opacity-60"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Action Buttons for Editable Proposals */}
-        {!selectedHistoryProject && isEditable && (
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        {/* Direct Action Button */}
+        {isEditable && (
+          <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => handleSubmit(true)}
+              onClick={handleSubmit}
               disabled={loading}
-              className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
+              className="px-6 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 dark:shadow-indigo-950 flex items-center gap-2"
             >
-              <Save className="w-4 h-4" /> Save Draft
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSubmit(false)}
-              disabled={loading}
-              className="px-5 py-2.5 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 dark:shadow-indigo-950 flex items-center gap-2"
-            >
-              <Send className="w-4 h-4" /> Submit Proposal
+              <Send className="w-4 h-4" /> {loading ? 'Submitting...' : 'Submit Proposal'}
             </button>
           </div>
         )}
@@ -325,7 +223,7 @@ export const ProposalForm = () => {
       {projectsHistory.length > 0 && (
         <div className="space-y-4 pt-4">
           <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> My Projects History
+            <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> My Proposals History
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -346,7 +244,7 @@ export const ProposalForm = () => {
                   <div className="flex justify-between items-start">
                     <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{p.title}</h4>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase shrink-0 ${
+                      className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md uppercase shrink-0 ${
                         p.status === 'completed' || p.status === 'approved'
                           ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                           : p.status === 'rejected'

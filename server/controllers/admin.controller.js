@@ -4,7 +4,6 @@ import { User } from '../models/user.js';
 import { Project } from '../models/project.js';
 import * as userService from '../services/userService.js';
 import * as projectService from '../services/projectService.js';
-import * as notificationService from '../services/notificationService.js';
 
 // * Create Student
 export const createStudent = asyncHandler(async (req, res, next) => {
@@ -239,14 +238,6 @@ export const reviewProposalAdmin = asyncHandler(async (req, res, next) => {
     }
 
     await project.save();
-
-    await notificationService.notifyUser(
-        project.student,
-        `Admin updated your project proposal status to ${status}`,
-        status === 'approved' ? 'approval' : 'rejection',
-        '/student/project',
-        'high'
-    );
 
     res.status(200).json({
         success: true,

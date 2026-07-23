@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { Users, UserCheck, FolderKanban, CheckSquare, Sparkles, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Users, UserCheck, FolderKanban, CheckSquare, Sparkles, TrendingUp, AlertTriangle, UserMinus, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const TeacherDashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actionMsg, setActionMsg] = useState('');
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     fetchStats();
@@ -22,6 +24,20 @@ export const TeacherDashboard = () => {
       console.error('Failed to load teacher stats:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDropStudent = async (studentId, studentName) => {
+    if (!window.confirm(`Are you sure you want to drop supervision for ${studentName}?`)) return;
+    setActionMsg('');
+    setActionError('');
+
+    try {
+      const res = await api.put(`/teacher/students/${studentId}/drop`);
+      setActionMsg(res.data.message || `Dropped supervision for ${studentName}`);
+      fetchStats();
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to drop student supervision');
     }
   };
 
@@ -47,7 +63,7 @@ export const TeacherDashboard = () => {
               <Sparkles className="w-3.5 h-3.5" /> Faculty Supervisor Portal
             </div>
             <h1 className="text-xl font-extrabold tracking-tight">Welcome, Prof. {user.name}</h1>
-            <p className="text-xs text-indigo-200 mt-1">Manage student supervision requests, review proposals, and evaluate milestones.</p>
+            <p className="text-xs text-indigo-200 mt-1">Manage student supervision requests, review proposals, and supervise projects.</p>
           </div>
           <Link
             to="/teacher/requests"
@@ -57,6 +73,20 @@ export const TeacherDashboard = () => {
           </Link>
         </div>
       </div>
+
+      {actionMsg && (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{actionMsg}</span>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
 
       {/* Visual Supervisee Capacity Gauge Card */}
       <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
@@ -105,7 +135,10 @@ export const TeacherDashboard = () => {
             <UserCheck className="w-4 h-4 text-amber-500" />
           </div>
           <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats?.pendingRequestsCount || 0}</p>
-          <Link to="/teacher/requests" className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline mt-1 block">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            {stats?.pendingSupervisorRequestsCount || 0} Supervision &bull; {stats?.pendingConnectionRequestsCount || 0} Peer Connections
+          </p>
+          <Link to="/connections" className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline mt-2 block">
             Review requests &rarr;
           </Link>
         </div>
@@ -116,7 +149,10 @@ export const TeacherDashboard = () => {
             <FolderKanban className="w-4 h-4 text-blue-500" />
           </div>
           <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats?.pendingProposalsCount || 0}</p>
-          <Link to="/teacher/proposals" className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline mt-1 block">
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            Project proposals awaiting review
+          </p>
+          <Link to="/teacher/proposals" className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline mt-2 block">
             Review proposals &rarr;
           </Link>
         </div>
@@ -127,7 +163,10 @@ export const TeacherDashboard = () => {
             <CheckSquare className="w-4 h-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">{stats?.approvedProjectsCount || 0}</p>
-          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1 block">Active supervisions</span>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+            Active supervised projects
+          </p>
+          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mt-2 block">Active supervisions</span>
         </div>
       </div>
 
@@ -139,17 +178,25 @@ export const TeacherDashboard = () => {
             <p className="py-6 text-xs text-slate-400 dark:text-slate-500 text-center">No students currently assigned under supervision</p>
           ) : (
             stats.assignedStudents.map((st) => (
-              <div key={st._id} className="py-3 flex items-center justify-between">
+              <div key={st._id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 dark:bg-indigo-700 text-white font-bold flex items-center justify-center text-xs">
+                  <div className="w-9 h-9 rounded-full bg-indigo-600 dark:bg-indigo-700 text-white font-bold flex items-center justify-center text-xs shrink-0">
                     {st.name.charAt(0)}
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{st.name}</p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{st.name}</p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">{st.email} &bull; {st.department}</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{st.project?.title || 'Proposal Pending'}</span>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => handleDropStudent(st._id, st.name)}
+                    className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 text-xs font-semibold rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-all flex items-center gap-1 border border-rose-200 dark:border-rose-800"
+                  >
+                    <UserMinus className="w-3.5 h-3.5" /> Drop Student
+                  </button>
+                </div>
               </div>
             ))
           )}

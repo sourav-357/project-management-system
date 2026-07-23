@@ -10,39 +10,6 @@ export const PROJECT_STATUS = {
     COMPLETED: 'completed',
 };
 
-const milestoneSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: [true, 'Milestone title is required'],
-        trim: true,
-        maxLength: [150, 'Title cannot exceed 150 characters'],
-    },
-    description: {
-        type: String,
-        trim: true,
-        default: '',
-    },
-    dueDate: {
-        type: Date,
-        required: [true, 'Milestone due date is required'],
-    },
-    status: {
-        type: String,
-        enum: ['pending', 'submitted', 'approved', 'rejected'],
-        default: 'pending',
-    },
-    submissionUrl: {
-        type: String,
-        default: '',
-    },
-    teacherFeedback: {
-        type: String,
-        default: '',
-    },
-    submittedAt: Date,
-    reviewedAt: Date,
-}, { timestamps: true });
-
 const projectSchema = new mongoose.Schema({
     student: {
         type: mongoose.Schema.Types.ObjectId,
@@ -135,7 +102,6 @@ const projectSchema = new mongoose.Schema({
             }
         }
     ],
-    milestones: [milestoneSchema],
     deadline: {
         type: Date
     }
@@ -145,7 +111,7 @@ const projectSchema = new mongoose.Schema({
 projectSchema.index({ student: 1, isDeleted: 1 });
 projectSchema.index(
     { student: 1 },
-    { unique: true, partialFilterExpression: { isDeleted: false } } // Enforces 1 active project per student
+    { unique: true, partialFilterExpression: { isDeleted: false, status: { $nin: ['completed', 'rejected'] } } } // Enforces 1 active non-finalized project per student
 );
 projectSchema.index({ supervisor: 1, status: 1, isDeleted: 1 });
 projectSchema.index({ status: 1, createdAt: -1 });

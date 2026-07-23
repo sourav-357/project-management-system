@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { LogOut, BookOpen, User, Sun, Moon } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { NotificationDrawer } from './NotificationDrawer';
 
 export const Navbar = () => {
   const { user, logout } = useAuth();
@@ -59,7 +58,7 @@ export const Navbar = () => {
             <span className="font-bold text-base bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-800 dark:from-white dark:via-indigo-200 dark:to-slate-200 bg-clip-text text-transparent">
               Academic Workflow Platform
             </span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">FYP Project Governance & Tracking</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">Project Governance & Tracking</p>
           </div>
         </Link>
 
@@ -75,9 +74,6 @@ export const Navbar = () => {
 
           {user ? (
             <div className="flex items-center gap-3">
-              {/* Notification Bell Component */}
-              <NotificationDrawer />
-
               {/* Profile badge with Settings Link */}
               <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800">
                 <Link

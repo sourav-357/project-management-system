@@ -9,9 +9,79 @@ import { CallModal } from '../components/CallModal';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '👏', '💯'];
 
+// Date & Time formatting helpers
+const formatMessageTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+
+  const isToday = d.toDateString() === now.toDateString();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) {
+    return timeStr;
+  } else if (isYesterday) {
+    return `Yesterday ${timeStr}`;
+  } else if (d.getFullYear() === now.getFullYear()) {
+    const monthDay = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `${monthDay}, ${timeStr}`;
+  } else {
+    const fullDate = d.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return `${fullDate} ${timeStr}`;
+  }
+};
+
+const formatCallTime = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+
+  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isToday) {
+    return `Today at ${timeStr}`;
+  } else if (isYesterday) {
+    return `Yesterday at ${timeStr}`;
+  } else {
+    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at ${timeStr}`;
+  }
+};
+
+const getDayHeaderLabel = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+
+  if (d.toDateString() === now.toDateString()) {
+    return 'Today';
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString([], { month: 'long', day: 'numeric' });
+  }
+  return d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+};
+
 export const InstantChat = () => {
   const { user } = useAuth();
   const [socket, setSocket] = useState(null);
+
+  // Online active status state
+  const [onlineUsers, setOnlineUsers] = useState(new Set());
 
   // Connected friends state
   const [friends, setFriends] = useState([]);
@@ -40,7 +110,7 @@ export const InstantChat = () => {
 
   const messagesEndRef = useRef(null);
 
-  // 1. Setup Socket.io client connection
+  // 1. Setup Socket.io client connection & active user tracking
   useEffect(() => {
     const token = getAccessToken();
     const socketUrl = `${window.location.protocol}//${window.location.hostname}:3000`;
@@ -51,6 +121,27 @@ export const InstantChat = () => {
 
     newSocket.on('connect', () => {
       console.log('Socket.io connected to server on port 3000');
+      newSocket.emit('get_online_users', (res) => {
+        if (res && res.onlineUsers) {
+          setOnlineUsers(new Set(res.onlineUsers));
+        }
+      });
+    });
+
+    newSocket.on('user_online', ({ userId }) => {
+      setOnlineUsers((prev) => new Set([...prev, userId]));
+    });
+
+    newSocket.on('user_offline', ({ userId }) => {
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    });
+
+    newSocket.on('online_users_list', (userIds) => {
+      setOnlineUsers(new Set(userIds));
     });
 
     setSocket(newSocket);
@@ -371,8 +462,13 @@ export const InstantChat = () => {
                         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
                           {item.title} ({item.host?._id === user._id ? `With ${item.participants?.find((p) => p._id !== user._id)?.name || 'User'}` : `From ${item.host?.name}`})
                         </h4>
-                        <p className="text-[10px] text-slate-400">
-                          {new Date(item.createdAt).toLocaleString()} &bull; Status: <span className="capitalize font-bold">{item.status}</span>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          {formatCallTime(item.startedAt || item.createdAt)}
+                          {item.durationSeconds > 0 && ` \u2022 Duration: ${Math.floor(item.durationSeconds / 60)}m ${item.durationSeconds % 60}s`}
+                          {` \u2022 Status: `}
+                          <span className={`capitalize font-bold ${item.status === 'missed' || item.status === 'declined' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                            {item.status}
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -461,11 +557,16 @@ export const InstantChat = () => {
                       : 'hover:bg-slate-100/60 dark:hover:bg-slate-800/40'
                   }`}
                 >
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-[11px] overflow-hidden shrink-0">
-                    {friend.avatar ? (
-                      <img src={friend.avatar} alt={friend.name} className="w-full h-full object-cover" />
-                    ) : (
-                      friend.name?.charAt(0) || 'U'
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-[11px] overflow-hidden">
+                      {friend.avatar ? (
+                        <img src={friend.avatar} alt={friend.name} className="w-full h-full object-cover" />
+                      ) : (
+                        friend.name?.charAt(0) || 'U'
+                      )}
+                    </div>
+                    {onlineUsers.has(friend._id) && (
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" title="Active Now"></span>
                     )}
                   </div>
 
@@ -508,15 +609,29 @@ export const InstantChat = () => {
                     <ArrowLeft className="w-4 h-4" />
                   </button>
 
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-[11px] overflow-hidden border border-slate-300 dark:border-slate-700 shrink-0">
-                    {selectedFriend.avatar ? (
-                      <img src={selectedFriend.avatar} alt={selectedFriend.name} className="w-full h-full object-cover" />
-                    ) : (
-                      selectedFriend.name?.charAt(0) || 'U'
+                  <div className="relative shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-[11px] overflow-hidden border border-slate-300 dark:border-slate-700">
+                      {selectedFriend.avatar ? (
+                        <img src={selectedFriend.avatar} alt={selectedFriend.name} className="w-full h-full object-cover" />
+                      ) : (
+                        selectedFriend.name?.charAt(0) || 'U'
+                      )}
+                    </div>
+                    {onlineUsers.has(selectedFriend._id) && (
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full"></span>
                     )}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{selectedFriend.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{selectedFriend.name}</h3>
+                      {onlineUsers.has(selectedFriend._id) ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[9px] font-extrabold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Active Now
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Offline</span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
                       {selectedFriend.role} &bull; {selectedFriend.department || 'General'}
                     </p>
@@ -588,105 +703,117 @@ export const InstantChat = () => {
                     No messages yet. Send a message or start a voice/video call!
                   </div>
                 ) : (
-                  messages.map((msg) => {
+                  messages.map((msg, index) => {
                     const isMine = msg.sender === user._id || msg.sender?._id === user._id;
                     const isMissedCall = msg.content?.includes('Missed');
 
+                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                    const showDateHeader = !prevMsg || new Date(prevMsg.createdAt).toDateString() !== new Date(msg.createdAt).toDateString();
+
                     return (
-                      <div
-                        id={`msg-${msg._id}`}
-                        key={msg._id}
-                        className={`flex flex-col group relative transition-all rounded-xl ${isMine ? 'items-end' : 'items-start'}`}
-                      >
-                        {/* Hover Quick Action Toolbar */}
-                        <div
-                          className={`hidden group-hover:flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5 shadow-md absolute -top-3 z-10 ${
-                            isMine ? 'right-0' : 'left-0'
-                          }`}
-                        >
-                          <button
-                            onClick={() => setReplyToMessage(msg)}
-                            className="p-0.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold flex items-center gap-0.5"
-                            title="Tag / Reply to message"
-                          >
-                            <Reply className="w-3 h-3" /> Reply
-                          </button>
-                          <div className="h-2.5 w-[1px] bg-slate-200 dark:bg-slate-700" />
-                          {EMOJIS.slice(0, 6).map((emoji) => (
-                            <button
-                              key={emoji}
-                              onClick={() => handleToggleEmoji(msg._id, emoji)}
-                              className="text-xs hover:scale-125 transition-transform"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* SLEEK COMPACT MESSAGE BUBBLE */}
-                        <div
-                          className={`max-w-[85%] sm:max-w-[70%] px-3.5 py-2.5 rounded-xl text-xs space-y-1 shadow-sm transition-all ${
-                            isMissedCall
-                              ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
-                              : isMine
-                              ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-xs border border-indigo-500/20'
-                              : 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 rounded-tl-xs border border-slate-200/80 dark:border-slate-700/80'
-                          }`}
-                        >
-                          {/* TAGGED / REPLIED MESSAGE PREVIEW WITH JUMP CLICK */}
-                          {msg.replyTo && (
-                            <div
-                              onClick={() => handleJumpToMessage(msg.replyTo._id || msg.replyTo)}
-                              className={`p-2 rounded-lg text-[11px] mb-1 border-l-3 cursor-pointer hover:opacity-95 transition-all shadow-inner ${
-                                isMine
-                                  ? 'bg-black/20 border-indigo-300 text-indigo-100'
-                                  : 'bg-slate-200/80 dark:bg-slate-700/80 border-indigo-500 text-slate-800 dark:text-slate-200'
-                              }`}
-                              title="Click to jump to tagged message"
-                            >
-                              <div className="flex items-center justify-between font-bold text-[10px]">
-                                <span className="flex items-center gap-1">
-                                  <CornerDownRight className="w-2.5 h-2.5 text-indigo-400" />
-                                  {msg.replyTo.sender?.name || 'Tagged Message'}
-                                </span>
-                              </div>
-                              <p className="truncate opacity-90 italic mt-0.5 text-[10px]">{msg.replyTo.content}</p>
-                            </div>
-                          )}
-
-                          <p className="leading-snug whitespace-pre-wrap font-medium">{msg.content}</p>
-
-                          <div
-                            className={`flex items-center justify-end gap-1 text-[9px] pt-0.5 ${
-                              isMine ? 'text-indigo-200' : 'text-slate-400'
-                            }`}
-                          >
-                            <span>
-                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <React.Fragment key={msg._id || index}>
+                        {showDateHeader && (
+                          <div className="flex items-center justify-center my-3">
+                            <span className="px-3 py-1 bg-slate-200/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-full shadow-xs uppercase tracking-wider">
+                              {getDayHeaderLabel(msg.createdAt)}
                             </span>
-                            {isMine && !isMissedCall && (
-                              msg.isRead ? (
-                                <CheckCheck className="w-3 h-3 text-sky-300" title="Read" />
-                              ) : (
-                                <Check className="w-3 h-3 text-indigo-300" title="Sent" />
-                              )
-                            )}
-                          </div>
-                        </div>
-
-                        {msg.reactions && msg.reactions.length > 0 && (
-                          <div className="flex gap-1 mt-0.5">
-                            {msg.reactions.map((r, idx) => (
-                              <span
-                                key={idx}
-                                className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] rounded-full text-slate-800 dark:text-slate-200 shadow-sm"
-                              >
-                                {r.emoji}
-                              </span>
-                            ))}
                           </div>
                         )}
-                      </div>
+
+                        <div
+                          id={`msg-${msg._id}`}
+                          className={`flex flex-col group relative transition-all rounded-xl ${isMine ? 'items-end' : 'items-start'}`}
+                        >
+                          {/* Hover Quick Action Toolbar */}
+                          <div
+                            className={`hidden group-hover:flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full px-2 py-0.5 shadow-md absolute -top-3 z-10 ${
+                              isMine ? 'right-0' : 'left-0'
+                            }`}
+                          >
+                            <button
+                              onClick={() => setReplyToMessage(msg)}
+                              className="p-0.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 text-[10px] font-bold flex items-center gap-0.5"
+                              title="Tag / Reply to message"
+                            >
+                              <Reply className="w-3 h-3" /> Reply
+                            </button>
+                            <div className="h-2.5 w-[1px] bg-slate-200 dark:bg-slate-700" />
+                            {EMOJIS.slice(0, 6).map((emoji) => (
+                              <button
+                                key={emoji}
+                                onClick={() => handleToggleEmoji(msg._id, emoji)}
+                                className="text-xs p-0.5 opacity-80 hover:opacity-100"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* SLEEK COMPACT MESSAGE BUBBLE */}
+                          <div
+                            className={`max-w-[85%] sm:max-w-[70%] px-3.5 py-2.5 rounded-xl text-xs space-y-1 shadow-sm transition-all ${
+                              isMissedCall
+                                ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                                : isMine
+                                ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-tr-xs border border-indigo-500/20'
+                                : 'bg-slate-100 dark:bg-slate-800/90 text-slate-900 dark:text-slate-100 rounded-tl-xs border border-slate-200/80 dark:border-slate-700/80'
+                            }`}
+                          >
+                            {/* TAGGED / REPLIED MESSAGE PREVIEW WITH JUMP CLICK */}
+                            {msg.replyTo && (
+                              <div
+                                onClick={() => handleJumpToMessage(msg.replyTo._id || msg.replyTo)}
+                                className={`p-2 rounded-lg text-[11px] mb-1 border-l-3 cursor-pointer hover:opacity-95 transition-all shadow-inner ${
+                                  isMine
+                                    ? 'bg-black/20 border-indigo-300 text-indigo-100'
+                                    : 'bg-slate-200/80 dark:bg-slate-700/80 border-indigo-500 text-slate-800 dark:text-slate-200'
+                                }`}
+                                title="Click to jump to tagged message"
+                              >
+                                <div className="flex items-center justify-between font-bold text-[10px]">
+                                  <span className="flex items-center gap-1">
+                                    <CornerDownRight className="w-2.5 h-2.5 text-indigo-400" />
+                                    {msg.replyTo.sender?.name || 'Tagged Message'}
+                                  </span>
+                                </div>
+                                <p className="truncate opacity-90 italic mt-0.5 text-[10px]">{msg.replyTo.content}</p>
+                              </div>
+                            )}
+
+                            <p className="leading-snug whitespace-pre-wrap font-medium">{msg.content}</p>
+
+                            <div
+                              className={`flex items-center justify-end gap-1 text-[9px] pt-0.5 ${
+                                isMine ? 'text-indigo-200' : 'text-slate-400'
+                              }`}
+                            >
+                              <span>
+                                {formatMessageTime(msg.createdAt)}
+                              </span>
+                              {isMine && !isMissedCall && (
+                                msg.isRead ? (
+                                  <CheckCheck className="w-3.5 h-3.5 text-sky-300 font-extrabold" title={`Read ${msg.readAt ? `at ${new Date(msg.readAt).toLocaleTimeString()}` : ''}`} />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5 text-indigo-200" title="Sent (Unread)" />
+                                )
+                              )}
+                            </div>
+                          </div>
+
+                          {msg.reactions && msg.reactions.length > 0 && (
+                            <div className="flex gap-1 mt-0.5">
+                              {msg.reactions.map((r, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] rounded-full text-slate-800 dark:text-slate-200 shadow-sm"
+                                >
+                                  {r.emoji}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </React.Fragment>
                     );
                   })
                 )}
@@ -705,7 +832,7 @@ export const InstantChat = () => {
                           setNewMessage((prev) => prev + emoji);
                           setShowEmojiPicker(false);
                         }}
-                        className="text-base hover:scale-125 transition-transform p-0.5"
+                        className="text-base p-1 opacity-80 hover:opacity-100"
                       >
                         {emoji}
                       </button>

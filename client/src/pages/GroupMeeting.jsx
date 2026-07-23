@@ -45,11 +45,19 @@ export const GroupMeeting = () => {
     try {
       setLoading(true);
       const res = await api.get(`/meetings/${meetingId}`);
-      setMeeting(res.data.data.meeting);
+      const fetchedMeeting = res.data.data.meeting;
+
+      if (!fetchedMeeting || fetchedMeeting.status === 'ended') {
+        alert('This meeting has ended and is no longer active.');
+        navigate('/meetings');
+        return;
+      }
+
+      setMeeting(fetchedMeeting);
       setupMeetingSocket();
     } catch (err) {
       console.error('Error fetching meeting details:', err);
-      alert('Meeting not found or closed.');
+      alert(err.response?.data?.message || 'This meeting has ended or does not exist.');
       navigate('/meetings');
     } finally {
       setLoading(false);

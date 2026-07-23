@@ -1,7 +1,6 @@
 import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { Deadline } from '../models/deadline.js';
-import * as notificationService from '../services/notificationService.js';
 import { User } from '../models/user.js';
 
 // * Create a new Academic Deadline
@@ -22,15 +21,6 @@ export const createDeadline = asyncHandler(async (req, res, next) => {
     // Notify all active students about new global deadline
     if (!project) {
         const students = await User.find({ role: 'Student', status: 'active', isDeleted: false }).select('_id');
-        for (const st of students) {
-            await notificationService.notifyUser(
-                st._id,
-                `New Academic Deadline Added: "${name}" due on ${new Date(dueDate).toLocaleDateString()}`,
-                'deadline',
-                '/student/dashboard',
-                'high'
-            );
-        }
     }
 
     res.status(201).json({

@@ -10,10 +10,10 @@ router.use(isAuthenticated, isAuthorized('Student'));
 
 router.get('/project', studentController.getStudentProject);
 router.post('/project-proposal', validateProposalInput, studentController.submitProposal);
-router.post('/milestones/:milestoneId/submit', studentController.submitMilestone);
 router.post('/upload/:projectId', upload.array('files', 10), handleUploadError, studentController.uploadFiles);
 router.get('/fetch-supervisors', studentController.getAvailableSupervisors);
 router.get('/supervisor', studentController.getSupervisor);
+router.get('/pending-supervisor-request', studentController.getPendingSupervisorRequest);
 router.post('/supervisor-request', validateSupervisorRequestInput, studentController.requestSupervisor);
 router.get('/feedback/:projectId', studentController.getFeedback);
 router.get('/fetch-dashboard-stats', studentController.getDashboardStats);

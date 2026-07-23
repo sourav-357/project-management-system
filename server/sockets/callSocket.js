@@ -138,8 +138,20 @@ export const initializeCallSockets = (io) => {
         // 2. GROUP VIDEO MEETING WEBRTC SIGNALS
         // ==========================================
 
-        socket.on('join_meeting_room', ({ meetingId, isMuted, isVideoOff }) => {
+        socket.on('join_meeting_room', async ({ meetingId, isMuted, isVideoOff }) => {
             if (!meetingId) return;
+
+            try {
+                const targetMeeting = await Meeting.findById(meetingId).select('status').lean();
+                if (!targetMeeting || targetMeeting.status === 'ended') {
+                    socket.emit('meeting_ended_by_host');
+                    return;
+                }
+            } catch (err) {
+                socket.emit('meeting_ended_by_host');
+                return;
+            }
+
             const roomName = `meeting_${meetingId}`;
             socket.join(roomName);
 

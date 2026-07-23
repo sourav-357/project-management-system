@@ -35,7 +35,6 @@ export const Sidebar = () => {
     { label: 'My Proposal', icon: FileText, path: '/student/proposal' },
     { label: 'Supervisor Selector', icon: UserCheck, path: '/student/supervisors' },
     { label: 'Project Documents', icon: UploadCloud, path: '/student/documents' },
-    { label: 'Feedback History', icon: MessageSquare, path: '/student/feedback' },
     ...commonNav,
     { label: 'Profile & Settings', icon: Settings, path: '/student/profile' },
   ];
@@ -45,7 +44,6 @@ export const Sidebar = () => {
     { label: 'Supervisor Requests', icon: UserCheck, path: '/teacher/requests' },
     { label: 'Supervised Students', icon: Users, path: '/teacher/students' },
     { label: 'Project Proposals', icon: FolderKanban, path: '/teacher/proposals' },
-    { label: 'Milestones Review', icon: CheckSquare, path: '/teacher/milestones' },
     ...commonNav,
     { label: 'Profile & Settings', icon: Settings, path: '/teacher/profile' },
   ];

@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(isAuthenticated);
 
 router.get('/explore', connectionController.exploreUsers);
+router.get('/my-connections', connectionController.getMyConnections);
 router.post('/request', connectionController.sendConnectionRequest);
 router.put('/respond/:connectionId', connectionController.respondToRequest);
 router.get('/pending', connectionController.getPendingRequests);

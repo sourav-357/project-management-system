@@ -3,7 +3,6 @@ import ErrorHandler from '../middlewares/error.js';
 import { Meeting } from '../models/meeting.js';
 import { CallHistory } from '../models/callHistory.js';
 import { User } from '../models/user.js';
-import * as notificationService from '../services/notificationService.js';
 
 // * 0. Get All Available Invitees (All Active Users Except Current User)
 export const getAvailableInvitees = asyncHandler(async (req, res, next) => {
@@ -25,85 +24,71 @@ export const getAvailableInvitees = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 1. Create & Start Group Video Meeting (Teachers & Admins Only)
+// * 1. Create & Schedule Meeting (Host Only)
 export const createMeeting = asyncHandler(async (req, res, next) => {
-    const { title, description, invitedUserIds } = req.body;
+    const { title, description, scheduledAt, maxParticipants, invitees } = req.body;
     const hostId = req.user._id;
 
-    if (!title || !title.trim()) {
-        return next(new ErrorHandler('Meeting title is required', 400));
+    if (!title || !scheduledAt) {
+        return next(new ErrorHandler('Title and scheduled date/time are required', 400));
     }
-
-    const invitees = Array.isArray(invitedUserIds) ? invitedUserIds : [];
 
     const meeting = await Meeting.create({
+        host: hostId,
         title: title.trim(),
         description: description ? description.trim() : '',
-        host: hostId,
-        invitedUsers: invitees,
-        status: 'active',
-        startedAt: new Date(),
+        scheduledAt: new Date(scheduledAt),
+        maxParticipants: maxParticipants || 10,
+        invitees: invitees && Array.isArray(invitees) ? invitees : [],
+        status: 'scheduled',
     });
-
-    const callRecord = await CallHistory.create({
-        callType: 'group_meeting',
-        host: hostId,
-        participants: [hostId, ...invitees],
-        title: title.trim(),
-        status: 'ongoing',
-        startedAt: new Date(),
-    });
-
-    // Notify all invited users
-    for (const userId of invitees) {
-        await notificationService.notifyUser(
-            userId,
-            `${req.user.name} (${req.user.role}) invited you to a video meeting: "${title.trim()}"`,
-            'meeting',
-            `/meetings/${meeting._id}`,
-            'high'
-        );
-    }
 
     res.status(201).json({
         success: true,
-        message: 'Group video meeting created & started successfully',
-        data: { meeting, callRecord },
+        message: 'Meeting scheduled successfully',
+        data: { meeting },
     });
 });
 
-// * 2. Get Active & Upcoming Meetings for User
-export const getMeetings = asyncHandler(async (req, res, next) => {
+// * 2. Get Upcoming & Active Meetings for Current User
+export const getMyMeetings = asyncHandler(async (req, res, next) => {
     const userId = req.user._id;
 
     const meetings = await Meeting.find({
-        status: { $in: ['active', 'scheduled'] },
-        $or: [{ host: userId }, { invitedUsers: userId }],
+        $or: [
+            { host: userId },
+            { invitees: userId }
+        ],
+        status: { $in: ['scheduled', 'ongoing'] }
     })
-        .sort({ createdAt: -1 })
-        .populate('host', 'name email role avatar department')
-        .populate('invitedUsers', 'name email role avatar department')
+        .populate('host', 'name email avatar department role')
+        .populate('invitees', 'name email avatar department role')
+        .sort({ scheduledAt: 1 })
         .lean();
 
     res.status(200).json({
         success: true,
-        message: 'Active & upcoming meetings fetched',
+        message: 'User meetings fetched successfully',
         data: { meetings },
     });
 });
 
-// * 3. Get Single Meeting Details
+// * 3. Get Meeting Details by ID (Locked if Meeting Ended)
 export const getMeetingById = asyncHandler(async (req, res, next) => {
     const { meetingId } = req.params;
-    const userId = req.user._id;
 
     const meeting = await Meeting.findById(meetingId)
-        .populate('host', 'name email role avatar department')
-        .populate('invitedUsers', 'name email role avatar department')
+        .populate('host', 'name email avatar department role')
+        .populate('invitees', 'name email avatar department role')
+        .populate('participants', 'name email avatar department role')
         .lean();
 
     if (!meeting) {
         return next(new ErrorHandler('Meeting not found', 404));
+    }
+
+    if (meeting.status === 'ended') {
+        return next(new ErrorHandler('This meeting has already ended by host and cannot be joined.', 400));
     }
 
     res.status(200).json({
@@ -113,55 +98,65 @@ export const getMeetingById = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 4. Get Group Video Meeting Attendance History Only
-export const getMeetingHistory = asyncHandler(async (req, res, next) => {
-    const userId = req.user._id.toString();
-
-    const records = await CallHistory.find({
-        callType: 'group_meeting',
-        $or: [{ host: req.user._id }, { participants: req.user._id }],
-    })
-        .sort({ createdAt: -1 })
-        .limit(100)
-        .populate('host', 'name email role avatar department')
-        .populate('participants', 'name email role avatar department')
-        .lean();
-
-    const history = records.map((record) => {
-        const participantIds = (record.participants || []).map((p) => p._id.toString());
-        const isAttended = participantIds.includes(userId);
-        return {
-            ...record,
-            userAttendanceStatus: isAttended ? 'attended' : 'missed',
-        };
-    });
-
-    res.status(200).json({
-        success: true,
-        message: 'Meeting history fetched',
-        data: { history },
-    });
-});
-
-// * 5. Delete Meeting History Record
-export const deleteMeetingHistoryRecord = asyncHandler(async (req, res, next) => {
-    const { historyId } = req.params;
+// * 4. Join Meeting (Active Check & Status Update)
+export const joinMeeting = asyncHandler(async (req, res, next) => {
+    const { meetingId } = req.params;
     const userId = req.user._id;
 
-    const record = await CallHistory.findById(historyId);
-    if (!record) {
-        return next(new ErrorHandler('Meeting history record not found', 404));
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting) {
+        return next(new ErrorHandler('Meeting not found', 404));
     }
 
-    await CallHistory.findByIdAndDelete(historyId);
+    if (meeting.status === 'ended') {
+        return next(new ErrorHandler('This meeting has already ended and is locked against joining', 400));
+    }
+
+    if (meeting.status === 'scheduled') {
+        meeting.status = 'ongoing';
+        meeting.startedAt = new Date();
+    }
+
+    if (!meeting.participants.includes(userId)) {
+        meeting.participants.push(userId);
+    }
+
+    await meeting.save();
 
     res.status(200).json({
         success: true,
-        message: 'Meeting history record deleted successfully',
+        message: 'Joined meeting room successfully',
+        data: { meeting },
     });
 });
 
-// * 5. End Meeting (Host Only)
+// * 5. Leave Meeting
+export const leaveMeeting = asyncHandler(async (req, res, next) => {
+    const { meetingId } = req.params;
+    const userId = req.user._id;
+
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting) {
+        return next(new ErrorHandler('Meeting not found', 404));
+    }
+
+    meeting.participants = meeting.participants.filter(p => p.toString() !== userId.toString());
+
+    if (meeting.participants.length === 0 && meeting.status === 'ongoing') {
+        meeting.status = 'ended';
+        meeting.endedAt = new Date();
+    }
+
+    await meeting.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Left meeting room',
+        data: { meeting },
+    });
+});
+
+// * 6. End Meeting (Host Only - Forces Disconnection for All Active Participants)
 export const endMeeting = asyncHandler(async (req, res, next) => {
     const { meetingId } = req.params;
     const userId = req.user._id;
@@ -186,9 +181,43 @@ export const endMeeting = asyncHandler(async (req, res, next) => {
         { status: 'completed', endedAt: new Date(), durationSeconds }
     );
 
+    // Broadcast room end socket event if io is available
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`meeting_${meetingId}`).emit('meeting_ended_by_host');
+    }
+
     res.status(200).json({
         success: true,
         message: 'Meeting ended successfully',
         data: { meeting },
+    });
+});
+
+// * 7. Delete Meeting (Host Only)
+export const deleteMeeting = asyncHandler(async (req, res, next) => {
+    const { meetingId } = req.params;
+    const userId = req.user._id;
+
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting) {
+        return next(new ErrorHandler('Meeting not found', 404));
+    }
+
+    if (meeting.host.toString() !== userId.toString() && req.user.role !== 'Admin') {
+        return next(new ErrorHandler('Only the meeting host or an Admin can delete this meeting', 403));
+    }
+
+    // Broadcast room end socket event if io is available
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`meeting_${meetingId}`).emit('meeting_ended_by_host');
+    }
+
+    await Meeting.findByIdAndDelete(meetingId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Meeting deleted successfully',
     });
 });

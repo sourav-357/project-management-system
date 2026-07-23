@@ -3,6 +3,8 @@ import { User } from '../models/user.js';
 import { Connection } from '../models/connection.js';
 import { Message } from '../models/message.js';
 
+const onlineUserSockets = new Map();
+
 export const initializeChatSockets = (io) => {
     // Middleware for Socket.io JWT authentication
     io.use(async (socket, next) => {
@@ -28,6 +30,24 @@ export const initializeChatSockets = (io) => {
     io.on('connection', (socket) => {
         const userId = socket.user._id.toString();
         socket.join(userId);
+
+        // Track active online user sockets
+        let userSockets = onlineUserSockets.get(userId) || new Set();
+        userSockets.add(socket.id);
+        onlineUserSockets.set(userId, userSockets);
+
+        // Broadcast online status to all sockets
+        io.emit('user_online', { userId });
+
+        // Handler: Fetch current list of online user IDs
+        socket.on('get_online_users', (callback) => {
+            const onlineUserIds = Array.from(onlineUserSockets.keys());
+            if (typeof callback === 'function') {
+                callback({ success: true, onlineUsers: onlineUserIds });
+            } else {
+                socket.emit('online_users_list', onlineUserIds);
+            }
+        });
 
         // Handler: Send Message
         socket.on('send_message', async (data, callback) => {
@@ -132,7 +152,14 @@ export const initializeChatSockets = (io) => {
         });
 
         socket.on('disconnect', () => {
-            // Socket disconnected
+            let activeSockets = onlineUserSockets.get(userId);
+            if (activeSockets) {
+                activeSockets.delete(socket.id);
+                if (activeSockets.size === 0) {
+                    onlineUserSockets.delete(userId);
+                    io.emit('user_offline', { userId });
+                }
+            }
         });
     });
 };

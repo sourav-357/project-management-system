@@ -2,14 +2,12 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { User } from '../models/user.js';
 import { Project } from '../models/project.js';
-import { Notification } from '../models/notification.js';
+import { SupervisorRequest } from '../models/supervisorRequest.js';
 import * as projectService from '../services/projectService.js';
 import * as requestService from '../services/requestService.js';
-import * as notificationService from '../services/notificationService.js';
 import * as fileService from '../services/fileService.js';
 import { PROJECT_STATUS } from '../models/project.js';
 
-// * Get Student Project
 // * Get Student Project & History
 export const getStudentProject = asyncHandler(async (req, res, next) => {
     const studentId = req.user._id;
@@ -19,8 +17,8 @@ export const getStudentProject = asyncHandler(async (req, res, next) => {
         .sort({ createdAt: -1 })
         .populate('supervisor', 'name email avatar department');
 
-    // Find current active project (status not completed)
-    const activeProject = projects.find(p => p.status !== PROJECT_STATUS.COMPLETED) || null;
+    // Find current active project (status not completed and not rejected)
+    const activeProject = projects.find(p => p.status !== PROJECT_STATUS.COMPLETED && p.status !== PROJECT_STATUS.REJECTED) || null;
 
     res.status(200).json({
         success: true,
@@ -32,62 +30,39 @@ export const getStudentProject = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * Submit or Save Draft Proposal (State Machine & Policy Guarded)
+// * Submit or Update Project Proposal (Immutable once submitted/approved)
 export const submitProposal = asyncHandler(async (req, res, next) => {
-    const { title, description, isDraft, milestones, projectId } = req.body;
+    const { title, description } = req.body;
     const studentId = req.user._id;
 
-    if (!title || !description) {
+    if (!title || !title.trim() || !description || !description.trim()) {
         return next(new ErrorHandler('Please provide title and description', 400));
     }
 
-    // Find target project if editing existing draft/rejected, or current active non-completed project
-    let targetProject = null;
-    if (projectId) {
-        targetProject = await Project.findById(projectId);
-    } else {
-        targetProject = await Project.findOne({
-            student: studentId,
-            isDeleted: false,
-            status: { $ne: PROJECT_STATUS.COMPLETED },
-        }).sort({ createdAt: -1 });
+    // Check for existing active project (any status other than completed or rejected)
+    const existingActiveProject = await Project.findOne({
+        student: studentId,
+        isDeleted: false,
+        status: { $nin: [PROJECT_STATUS.COMPLETED, PROJECT_STATUS.REJECTED] },
+    });
+
+    if (existingActiveProject) {
+        return next(
+            new ErrorHandler(
+                `You cannot edit or submit a proposal while your current project is active (${existingActiveProject.status}). A new proposal can only be created if your previous project was rejected or completed.`,
+                400
+            )
+        );
     }
 
-    if (targetProject && targetProject.status !== PROJECT_STATUS.COMPLETED) {
-        if (targetProject.status !== PROJECT_STATUS.DRAFT && targetProject.status !== PROJECT_STATUS.REJECTED) {
-            return next(new ErrorHandler(`Cannot edit proposal in current status: '${targetProject.status}'`, 403));
-        }
-
-        const targetStatus = isDraft ? PROJECT_STATUS.DRAFT : PROJECT_STATUS.SUBMITTED;
-
-        targetProject.title = title;
-        targetProject.description = description;
-        targetProject.isDraft = Boolean(isDraft);
-        targetProject.status = targetStatus;
-
-        if (milestones && Array.isArray(milestones)) {
-            targetProject.milestones = milestones;
-        }
-        await targetProject.save();
-
-        return res.status(200).json({
-            success: true,
-            message: isDraft ? 'Draft saved successfully' : 'Proposal updated & submitted',
-            data: { project: targetProject },
-        });
-    }
-
-    // Creating a NEW proposal (if previous is completed or no active project exists)
-    const initialStatus = isDraft ? PROJECT_STATUS.DRAFT : PROJECT_STATUS.SUBMITTED;
-
+    // Creating a fresh NEW proposal (if previous is completed or rejected or no active project exists)
     const projectData = {
         student: studentId,
         supervisor: req.user.supervisor || null,
-        title,
-        description,
-        status: initialStatus,
-        isDraft: Boolean(isDraft),
-        milestones: Array.isArray(milestones) ? milestones : [],
+        title: title.trim(),
+        description: description.trim(),
+        status: PROJECT_STATUS.SUBMITTED,
+        isDraft: false,
         files: [],
         feedback: [],
     };
@@ -97,54 +72,7 @@ export const submitProposal = asyncHandler(async (req, res, next) => {
 
     res.status(201).json({
         success: true,
-        message: isDraft ? 'Draft proposal saved successfully' : 'Project proposal submitted successfully',
-        data: { project },
-    });
-});
-
-// * Submit Milestone Work Deliverable
-export const submitMilestone = asyncHandler(async (req, res, next) => {
-    const { milestoneId } = req.params;
-    const { submissionUrl } = req.body;
-    const studentId = req.user._id;
-
-    const project = await Project.findOne({ student: studentId, isDeleted: false });
-    if (!project) {
-        return next(new ErrorHandler('Project not found', 404));
-    }
-
-    if (!project.supervisor && !req.user.supervisor) {
-        return next(new ErrorHandler('You cannot update milestones or upload files until a supervisor is assigned to your project', 400));
-    }
-
-    const milestone = project.milestones.id(milestoneId);
-    if (!milestone) {
-        return next(new ErrorHandler('Milestone not found', 404));
-    }
-
-    milestone.submissionUrl = submissionUrl || milestone.submissionUrl;
-    milestone.status = 'submitted';
-    milestone.submittedAt = new Date();
-
-    if (project.status === PROJECT_STATUS.APPROVED || project.status === PROJECT_STATUS.ASSIGNED) {
-        project.status = PROJECT_STATUS.MILESTONE_IN_PROGRESS;
-    }
-
-    await project.save();
-
-    if (project.supervisor) {
-        await notificationService.notifyUser(
-            project.supervisor,
-            `${req.user.name} submitted milestone "${milestone.title}"`,
-            'milestone_update',
-            `/teacher/milestones`,
-            'medium'
-        );
-    }
-
-    res.status(200).json({
-        success: true,
-        message: 'Milestone work submitted successfully',
+        message: 'Project proposal submitted successfully',
         data: { project },
     });
 });
@@ -160,7 +88,7 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
     }
 
     if (!project.supervisor && !req.user.supervisor) {
-        return next(new ErrorHandler('You cannot update milestones or upload files until a supervisor is assigned to your project', 400));
+        return next(new ErrorHandler('You cannot upload files until a supervisor is assigned to your project', 400));
     }
 
     if (project.status === PROJECT_STATUS.REJECTED || project.isDraft) {
@@ -180,53 +108,90 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * Fetch Available Supervisors
+// * Get Available Supervisors (With Accurate assignedCount, maxStudents, and isAvailable Flag)
 export const getAvailableSupervisors = asyncHandler(async (req, res, next) => {
     const supervisors = await User.find({ role: 'Teacher', status: 'active', isDeleted: false })
-        .select('name email department expertise maxStudents assignedStudents avatar')
+        .select('name email department maxStudents assignedStudents avatar expertise')
         .lean();
 
-    const formatted = supervisors.map(sup => ({
-        ...sup,
-        assignedCount: sup.assignedStudents ? sup.assignedStudents.length : 0,
-        isAvailable: (sup.assignedStudents ? sup.assignedStudents.length : 0) < sup.maxStudents,
-    }));
+    const formatted = supervisors.map((sup) => {
+        const assignedCount = sup.assignedStudents ? sup.assignedStudents.length : 0;
+        const maxStudents = sup.maxStudents || 10;
+        const isAvailable = assignedCount < maxStudents;
+
+        return {
+            ...sup,
+            assignedCount,
+            maxStudents,
+            isAvailable,
+            isFull: !isAvailable,
+        };
+    });
 
     res.status(200).json({
         success: true,
-        message: 'Supervisors fetched successfully',
+        message: 'Available supervisors fetched successfully',
         data: { supervisors: formatted },
     });
 });
 
-// * Get My Supervisor Info
+// * Get Assigned Supervisor
 export const getSupervisor = asyncHandler(async (req, res, next) => {
-    const studentId = req.user._id;
-    const student = await User.findById(studentId).populate('supervisor', 'name email department expertise avatar');
+    const user = await User.findById(req.user._id).populate('supervisor', 'name email department avatar maxStudents assignedStudents');
 
     res.status(200).json({
         success: true,
-        message: 'Supervisor fetched successfully',
-        data: { supervisor: student.supervisor || null },
+        message: 'Supervisor details fetched',
+        data: { supervisor: user.supervisor || null },
     });
 });
 
-// * Send Supervisor Request
+// * Get Pending Supervisor Request for Student
+export const getPendingSupervisorRequest = asyncHandler(async (req, res, next) => {
+    const studentId = req.user._id;
+
+    const pendingRequest = await SupervisorRequest.findOne({ student: studentId, status: 'pending' })
+        .populate('supervisor', 'name email department avatar')
+        .lean();
+
+    res.status(200).json({
+        success: true,
+        message: 'Pending supervisor request fetched',
+        data: { pendingRequest: pendingRequest || null },
+    });
+});
+
+// * Request Supervisor (Concurrency Safe, Proposal Approval Guarded & Pending Check)
 export const requestSupervisor = asyncHandler(async (req, res, next) => {
     const { teacherId, message } = req.body;
     const studentId = req.user._id;
-    const student = await User.findById(studentId);
 
+    const freshStudent = await User.findById(studentId);
     const project = await Project.findOne({ student: studentId, isDeleted: false });
+
     if (!project) {
-        return next(new ErrorHandler('Project not found', 404));
-    }
-    if (project.status !== 'approved' && project.status !== 'accepted') {
-        return next(new ErrorHandler('You can only request a supervisor for an approved project proposal', 400));
+        return next(new ErrorHandler('Project proposal not found. You must submit a project proposal first before requesting a supervisor.', 400));
     }
 
-    if (student.supervisor) {
-        return next(new ErrorHandler('You already have a supervisor assigned', 400));
+    if (project.status !== PROJECT_STATUS.APPROVED && project.status !== 'assigned' && project.status !== 'milestone_in_progress') {
+        return next(new ErrorHandler(`Your project proposal status is '${project.status}'. You can only request a supervisor after your project proposal is approved by faculty/admin.`, 400));
+    }
+
+    if (freshStudent?.supervisor || project?.supervisor) {
+        return next(new ErrorHandler('You already have an active supervisor assigned to your project.', 400));
+    }
+
+    // Block if student already has a pending supervisor request sent to any teacher
+    const existingPending = await SupervisorRequest.findOne({ student: studentId, status: 'pending' })
+        .populate('supervisor', 'name email department');
+
+    if (existingPending) {
+        return next(
+            new ErrorHandler(
+                `You already have a pending supervisor request sent to Prof. ${existingPending.supervisor?.name || 'Faculty'}. Please wait for them to accept or decline before sending another request.`,
+                400
+            )
+        );
     }
 
     const supervisor = await User.findById(teacherId);
@@ -241,17 +206,9 @@ export const requestSupervisor = asyncHandler(async (req, res, next) => {
     const requestData = {
         student: studentId,
         supervisor: teacherId,
-        message: message || 'Requesting supervisor assignment for final project',
+        message: message || 'Requesting supervisor assignment for project',
     };
     const request = await requestService.createRequest(requestData);
-
-    await notificationService.notifyUser(
-        teacherId,
-        `${student.name} requested you as their project supervisor`,
-        'request',
-        '/teacher/requests',
-        'medium'
-    );
 
     res.status(201).json({
         success: true,
@@ -269,11 +226,6 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
         .populate('supervisor', 'name email avatar')
         .lean();
 
-    const topNotifications = await Notification.find({ user: studentId })
-        .sort({ createdAt: -1 })
-        .limit(5)
-        .lean();
-
     const feedbackNotifications = project?.feedback && project.feedback.length > 0
         ? [...project.feedback].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3)
         : [];
@@ -281,7 +233,7 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     res.status(200).json({
         success: true,
         message: 'Dashboard stats fetched successfully',
-        data: { user, project, topNotifications, feedbackNotifications },
+        data: { user, project, feedbackNotifications },
     });
 });
 

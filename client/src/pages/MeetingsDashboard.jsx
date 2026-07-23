@@ -59,6 +59,28 @@ export const MeetingsDashboard = () => {
     }
   };
 
+  const handleEndMeeting = async (meetingId, meetingTitle) => {
+    if (!window.confirm(`End meeting "${meetingTitle}" for all participants?`)) return;
+    try {
+      await api.put(`/meetings/${meetingId}/end`);
+      setMsg(`Meeting "${meetingTitle}" ended and notifications cleared.`);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to end meeting');
+    }
+  };
+
+  const handleDeleteMeeting = async (meetingId, meetingTitle) => {
+    if (!window.confirm(`Delete meeting "${meetingTitle}"? This will remove notifications for all invited users.`)) return;
+    try {
+      await api.delete(`/meetings/${meetingId}`);
+      setMsg(`Meeting "${meetingTitle}" deleted.`);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete meeting');
+    }
+  };
+
   const openHostModal = async () => {
     setShowHostModal(true);
     try {
@@ -205,16 +227,36 @@ export const MeetingsDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <span className="text-[10px] text-slate-400">
                       Started: {new Date(m.startedAt || m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <button
-                      onClick={() => navigate(`/meetings/${m._id}`)}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-indigo-200 dark:shadow-indigo-950"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" /> Join Video Meeting
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {(m.host?._id === user._id || isHostRole) && (
+                        <>
+                          <button
+                            onClick={() => handleEndMeeting(m._id, m.title)}
+                            className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 text-xs font-bold rounded-xl transition-all border border-rose-200 dark:border-rose-900"
+                            title="End Meeting for All"
+                          >
+                            End
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMeeting(m._id, m.title)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-all border border-slate-200 dark:border-slate-800"
+                            title="Delete Meeting"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => navigate(`/meetings/${m._id}`)}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-indigo-200 dark:shadow-indigo-950"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" /> Join Video Meeting
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -318,7 +360,7 @@ export const MeetingsDashboard = () => {
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. FYP Final Evaluation & Progress Review"
+                  placeholder="e.g. Project Evaluation & Progress Review"
                   className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>

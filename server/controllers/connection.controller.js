@@ -2,7 +2,6 @@ import { asyncHandler } from '../middlewares/asyncHandler.js';
 import ErrorHandler from '../middlewares/error.js';
 import { Connection } from '../models/connection.js';
 import { User } from '../models/user.js';
-import * as notificationService from '../services/notificationService.js';
 
 // Auto-cleanup helper for rejected connection requests older than 10 days
 const cleanupExpiredRejections = async () => {
@@ -161,15 +160,6 @@ export const sendConnectionRequest = asyncHandler(async (req, res, next) => {
         });
     }
 
-    // Send notification to recipient
-    await notificationService.notifyUser(
-        recipientId,
-        `${req.user.name} (${req.user.role}) sent you a connection request`,
-        'request',
-        '/connections',
-        'medium'
-    );
-
     res.status(200).json({
         success: true,
         message: 'Connection request sent successfully',
@@ -200,13 +190,6 @@ export const respondToRequest = asyncHandler(async (req, res, next) => {
         conn.rejectedAt = null;
         await conn.save();
 
-        await notificationService.notifyUser(
-            conn.requester,
-            `${req.user.name} accepted your connection request!`,
-            'approval',
-            '/chat',
-            'high'
-        );
     } else if (action === 'reject') {
         if (conn.recipient.toString() !== currentUserId.toString()) {
             return next(new ErrorHandler('Only the recipient can reject a connection request', 403));
@@ -215,13 +198,6 @@ export const respondToRequest = asyncHandler(async (req, res, next) => {
         conn.rejectedAt = new Date();
         await conn.save();
 
-        await notificationService.notifyUser(
-            conn.requester,
-            `${req.user.name} declined your connection request`,
-            'rejection',
-            '/connections',
-            'low'
-        );
     } else if (action === 'block') {
         conn.status = 'blocked';
         conn.blockedBy = currentUserId;
@@ -383,3 +359,36 @@ export const blockUserDirectly = asyncHandler(async (req, res, next) => {
         message: 'User blocked successfully',
     });
 });
+
+// * 10. Get Active Connected Users
+export const getMyConnections = asyncHandler(async (req, res, next) => {
+    const currentUserId = req.user._id;
+
+    const connections = await Connection.find({
+        status: 'accepted',
+        $or: [{ requester: currentUserId }, { recipient: currentUserId }],
+    })
+        .populate('requester', 'name email role avatar department')
+        .populate('recipient', 'name email role avatar department')
+        .sort({ updatedAt: -1 })
+        .lean();
+
+    const connectedUsers = connections.map((conn) => {
+        const partner = conn.requester._id.toString() === currentUserId.toString()
+            ? conn.recipient
+            : conn.requester;
+
+        return {
+            ...partner,
+            connectionId: conn._id,
+            connectedAt: conn.updatedAt,
+        };
+    });
+
+    res.status(200).json({
+        success: true,
+        message: 'Connected users fetched successfully',
+        data: { connections: connectedUsers },
+    });
+});
+

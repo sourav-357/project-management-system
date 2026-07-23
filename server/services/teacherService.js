@@ -9,6 +9,10 @@ export const getRequestsForTeacher = async (teacherId) => {
         .sort({ createdAt: -1 });
 };
 
+export const getPendingRequestsCountForTeacher = async (teacherId) => {
+    return await SupervisorRequest.countDocuments({ supervisor: teacherId, status: 'pending' });
+};
+
 export const acceptSupervisorRequestAtomic = async (requestId, teacherId) => {
     const request = await SupervisorRequest.findById(requestId);
     if (!request) {

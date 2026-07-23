@@ -16,13 +16,11 @@ import { StudentDashboard } from './pages/StudentDashboard';
 import { ProposalForm } from './pages/ProposalForm';
 import { SupervisorSelector } from './pages/SupervisorSelector';
 import { StudentFiles } from './pages/StudentFiles';
-import { StudentFeedback } from './pages/StudentFeedback';
 
 import { TeacherDashboard } from './pages/TeacherDashboard';
 import { TeacherRequests } from './pages/TeacherRequests';
 import { SupervisedStudents } from './pages/SupervisedStudents';
 import { TeacherProposals } from './pages/TeacherProposals';
-import { TeacherMilestones } from './pages/TeacherMilestones';
 
 import { AdminDashboard } from './pages/AdminDashboard';
 import { UserManagement } from './pages/UserManagement';
@@ -67,7 +65,6 @@ export default function App() {
               <Route path="/student/proposal" element={<ProposalForm />} />
               <Route path="/student/supervisors" element={<SupervisorSelector />} />
               <Route path="/student/documents" element={<StudentFiles />} />
-              <Route path="/student/feedback" element={<StudentFeedback />} />
               <Route path="/student/profile" element={<ProfileSettings />} />
             </Route>
           </Route>
@@ -79,7 +76,6 @@ export default function App() {
               <Route path="/teacher/requests" element={<TeacherRequests />} />
               <Route path="/teacher/students" element={<SupervisedStudents />} />
               <Route path="/teacher/proposals" element={<TeacherProposals />} />
-              <Route path="/teacher/milestones" element={<TeacherMilestones />} />
               <Route path="/teacher/profile" element={<ProfileSettings />} />
             </Route>
           </Route>

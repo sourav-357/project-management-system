@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { UserCheck, Send, CheckCircle2, AlertCircle, Search, Filter } from 'lucide-react';
+import { UserCheck, Send, CheckCircle2, AlertCircle, Search, Filter, Lock, Clock, Sparkles } from 'lucide-react';
 
 export const SupervisorSelector = () => {
   const [supervisors, setSupervisors] = useState([]);
   const [mySupervisor, setMySupervisor] = useState(null);
+  const [project, setProject] = useState(null);
+  const [pendingRequest, setPendingRequest] = useState(null);
+
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [messageText, setMessageText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -24,12 +27,16 @@ export const SupervisorSelector = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [supListRes, mySupRes] = await Promise.all([
+      const [supListRes, mySupRes, projectRes, pendingRes] = await Promise.all([
         api.get('/student/fetch-supervisors'),
         api.get('/student/supervisor'),
+        api.get('/student/project'),
+        api.get('/student/pending-supervisor-request'),
       ]);
       setSupervisors(supListRes.data.data.supervisors || []);
-      setMySupervisor(mySupRes.data.data.supervisor);
+      setMySupervisor(mySupRes.data.data.supervisor || null);
+      setProject(projectRes.data.data.project || null);
+      setPendingRequest(pendingRes.data.data.pendingRequest || null);
     } catch (err) {
       console.error('Error loading supervisor data:', err);
     } finally {
@@ -40,6 +47,30 @@ export const SupervisorSelector = () => {
   const handleSendRequest = async (e) => {
     e.preventDefault();
     if (!selectedTeacher) return;
+
+    if (mySupervisor) {
+      setErrorMsg('You already have an active supervisor assigned to your project.');
+      setSelectedTeacher(null);
+      return;
+    }
+
+    if (pendingRequest) {
+      setErrorMsg(`You already have a pending supervisor request sent to Prof. ${pendingRequest.supervisor?.name}. Please wait for them to respond.`);
+      setSelectedTeacher(null);
+      return;
+    }
+
+    if (!project) {
+      setErrorMsg('You must submit a project proposal first before requesting a supervisor.');
+      setSelectedTeacher(null);
+      return;
+    }
+
+    if (project.status !== 'approved' && project.status !== 'assigned' && project.status !== 'milestone_in_progress') {
+      setErrorMsg(`Your project proposal is in status '${project.status}'. You can only request a supervisor once your proposal is approved.`);
+      setSelectedTeacher(null);
+      return;
+    }
 
     setSubmitting(true);
     setStatusMsg('');
@@ -53,7 +84,7 @@ export const SupervisorSelector = () => {
       setStatusMsg(res.data.message);
       fetchData();
     } catch (err) {
-      setErrorMsg(err.response?.data?.message || 'Failed to send supervisor request.');
+      setErrorMsg(err.response?.data?.message || 'Failed to submit supervisor request');
     } finally {
       setSelectedTeacher(null);
       setMessageText('');
@@ -81,11 +112,18 @@ export const SupervisorSelector = () => {
     );
   }
 
+  const projectStatus = project?.status;
+  const hasProject = !!project;
+  const isApproved = projectStatus === 'approved' || projectStatus === 'assigned' || projectStatus === 'milestone_in_progress';
+  const hasSupervisor = !!mySupervisor || !!project?.supervisor;
+  const hasPendingRequest = !!pendingRequest;
+  const canRequestSupervisor = hasProject && isApproved && !hasSupervisor && !hasPendingRequest;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Faculty Supervisor Directory</h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Search expertise, verify supervision capacity, and request faculty guidance for your FYP.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Search expertise, verify supervision capacity, and request faculty guidance for your project.</p>
       </div>
 
       {statusMsg && (
@@ -102,18 +140,74 @@ export const SupervisorSelector = () => {
         </div>
       )}
 
-      {mySupervisor && (
-        <div className="p-5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex items-center justify-between">
+      {/* DYNAMIC ELIGIBILITY / STATUS REASON BANNERS */}
+      {hasSupervisor ? (
+        <div className="p-5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm">
-              {mySupervisor.name.charAt(0)}
+            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0">
+              {mySupervisor ? mySupervisor.name.charAt(0) : 'S'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-slate-100">Assigned Supervisor: {mySupervisor.name}</p>
-              <p className="text-[11px] text-indigo-700 dark:text-indigo-300">{mySupervisor.email} &bull; {mySupervisor.department}</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Active Supervisor Assigned: {mySupervisor ? mySupervisor.name : 'Faculty Member'}
+              </p>
+              <p className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5">
+                You cannot request any new supervisor because you currently have an active supervisor assigned to your project ({mySupervisor?.email || ''}).
+              </p>
             </div>
           </div>
-          <span className="px-3 py-1 bg-indigo-600 text-white font-semibold text-xs rounded-lg">Active</span>
+          <span className="px-3 py-1 bg-indigo-600 text-white font-semibold text-xs rounded-lg shrink-0 self-start sm:self-auto">
+            Supervisor Assigned
+          </span>
+        </div>
+      ) : hasPendingRequest ? (
+        <div className="p-5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-sm shrink-0">
+              <Clock className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Supervision Request Pending: Prof. {pendingRequest.supervisor?.name}
+              </p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+                You currently have an active pending supervisor request sent to Prof. {pendingRequest.supervisor?.name} ({pendingRequest.supervisor?.department}). You cannot send a request to another teacher until this request is accepted or declined.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-amber-500 text-white font-semibold text-xs rounded-lg shrink-0 self-start sm:self-auto">
+            Request Pending Review
+          </span>
+        </div>
+      ) : !hasProject ? (
+        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-200 text-xs flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div>
+            <p className="font-bold">No Project Proposal Submitted</p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
+              You must submit a project proposal before you can request a faculty supervisor. Please write and submit your proposal first.
+            </p>
+          </div>
+        </div>
+      ) : !isApproved ? (
+        <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl text-blue-900 dark:text-blue-200 text-xs flex items-center gap-3">
+          <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+          <div>
+            <p className="font-bold">Proposal Pending Approval (Status: {projectStatus})</p>
+            <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">
+              Your project proposal is currently under evaluation. You can only request a supervisor after your project proposal is approved by faculty or admin.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div>
+            <p className="font-bold">Proposal Approved & Eligible for Supervision!</p>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
+              Your project proposal "{project?.title}" is approved! Select an available faculty supervisor from the directory below to send a request.
+            </p>
+          </div>
         </div>
       )}
 
@@ -162,7 +256,7 @@ export const SupervisorSelector = () => {
                         : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                     }`}
                   >
-                    {t.assignedCount} / {t.maxStudents} Students
+                    {t.assignedCount || 0} / {t.maxStudents || 10} Students
                   </span>
                 </div>
 
@@ -177,7 +271,36 @@ export const SupervisorSelector = () => {
                 )}
               </div>
 
-              {!mySupervisor && (
+              {/* ACTION BUTTON WITH CLEAR STATUS REASON BADGE */}
+              {hasSupervisor ? (
+                <button
+                  disabled
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                >
+                  Supervisor Already Assigned
+                </button>
+              ) : hasPendingRequest ? (
+                <button
+                  disabled
+                  className="w-full py-2 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs rounded-xl cursor-not-allowed border border-amber-200 dark:border-amber-800"
+                >
+                  Request Pending Review
+                </button>
+              ) : !hasProject ? (
+                <button
+                  disabled
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                >
+                  Submit Proposal First
+                </button>
+              ) : !isApproved ? (
+                <button
+                  disabled
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                >
+                  Proposal Pending Approval
+                </button>
+              ) : (
                 <button
                   disabled={!t.isAvailable}
                   onClick={() => setSelectedTeacher(t)}
@@ -192,7 +315,7 @@ export const SupervisorSelector = () => {
       </div>
 
       {/* Modal for sending request */}
-      {selectedTeacher && (
+      {selectedTeacher && canRequestSupervisor && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Request Supervisor: {selectedTeacher.name}</h3>
