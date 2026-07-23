@@ -1,8 +1,8 @@
 # Academic FYP Governance & Real-Time Collaboration Platform
 
-Production-grade MERN monorepo for governing Final Year Project (FYP) proposals, faculty supervisor allocation, milestone deliverables, social connections, real-time messaging, and WebRTC audio/video collaboration.
+A production-oriented MERN monorepo for governing Final Year Project (FYP) proposals, faculty supervisor allocation, milestone deliverables, and real-time collaboration (chat, calls, group meetings) between students, teachers, and administrators.
 
-Built for interview and production readiness: role-based access control, atomic MongoDB concurrency guards, dual JWT with refresh-token rotation, Socket.io real-time events, and WebRTC media lifecycle management.
+Built with engineering decisions front and center: role-based access control, atomic MongoDB concurrency guards, dual-JWT authentication with refresh-token rotation, Socket.io real-time events, and WebRTC media lifecycle management.
 
 ---
 
@@ -16,7 +16,7 @@ Built for interview and production readiness: role-based access control, atomic 
 - [Connection Requests](#connection-requests)
 - [Chat, Calls & Meetings](#chat-calls--meetings)
 - [Authentication & Refresh Tokens](#authentication--refresh-tokens)
-- [System Design for Interviews](#system-design-for-interviews)
+- [Server Bootstrap & Reliability](#server-bootstrap--reliability)
 - [Technology Stack](#technology-stack)
 - [Project Structure & Documentation Index](#project-structure--documentation-index)
 - [Quick Start](#quick-start)
@@ -30,11 +30,10 @@ Academic institutions need a controlled environment where:
 
 - Only administrators provision student and faculty accounts (no open self-registration).
 - Each student maintains exactly one active project at a time, with full historical audit of past proposals.
-- Faculty capacity limits are enforced atomically when multiple students request the same supervisor.
-- Supervision, milestones, and deliverables follow a governed state machine—not ad-hoc file sharing.
-- Students and faculty can collaborate in real time (chat, calls, group meetings) without leaving the platform.
-
-This platform combines **academic governance** with **real-time collaboration** in a single deployable system.
+- Faculty capacity limits are enforced atomically when multiple students request the same supervisor, avoiding race conditions.
+- Supervision, milestones, and deliverables follow a governed state machine instead of ad-hoc file sharing over email or chat apps.
+- Students and faculty can collaborate in real time — chat, calls, group meetings — without leaving the platform.
+This project pairs **academic governance** (proposal review, supervision, milestones) with **real-time collaboration** (chat/calls/meetings) in one deployable system, rather than treating them as separate tools.
 
 ---
 
@@ -116,9 +115,9 @@ This means a completely empty database gets three ready-to-use demo accounts—o
 ### Status state machine
 
 ```
-[draft] ──submit──> [submitted] ──review──> [approved] ──supervisor assigned──> [assigned] ──all milestones approved──> [completed]
-                         │                        │
-                         └──review──> [rejected] (historical, editable → resubmit)
+[draft] --submit--> [submitted] --review--> [approved] --supervisor assigned--> [assigned] --all milestones approved--> [completed]
+                         |                        |
+                         +--review--> [rejected] (historical, editable -> resubmit)
 ```
 
 | Status | Meaning |
@@ -202,6 +201,8 @@ Details: [server/controllers/README.md](./server/controllers/README.md) · [serv
 
 ## Chat, Calls & Meetings
 
+Both real-time channels are wired into the process at boot via a shared Socket.io instance — see [`server/README.md`](./server/README.md) for exactly how `server.js` initializes them.
+
 ### 1-on-1 messaging (`/chat`)
 
 - REST for history, pagination, reactions, clear chat
@@ -253,6 +254,23 @@ Implementation: [`client/src/api/axios.js`](./client/src/api/axios.js) · [`serv
 
 Login requires **email + password + role**. The role must match the stored user record—preventing a student from logging in through the teacher portal even with valid credentials.
 
+---
+
+## Server Bootstrap & Reliability
+ 
+`server.js` is the single process entry point. On startup it:
+ 
+1. Connects to MongoDB (`connectDB()`) before anything else — the server never starts listening against a broken DB connection.
+2. Wraps the shared `app` (Express) in a raw `http.Server` so the same server can carry both REST traffic and Socket.io.
+3. Attaches Socket.io with CORS restricted to known local dev origins and `credentials: true` (required for the httpOnly cookie auth flow to work over WebSocket handshakes).
+4. Initializes chat and call socket namespaces (`initializeChatSockets`, `initializeCallSockets`) against the same `io` instance.
+5. Starts listening on `process.env.PORT` (defaults to `3000`).
+Process-level safety nets:
+ 
+- `uncaughtException` is logged and the process exits immediately (`exit(1)`) — a synchronous error in application code is treated as unrecoverable rather than left to corrupt state.
+- `unhandledRejection` is logged; if the HTTP server is already listening, it is closed gracefully before the process exits, so in-flight requests aren't dropped mid-response.
+See [`server/README.md`](./server/README.md) for the full breakdown and current gaps (e.g. no `SIGTERM`/`SIGINT` handler yet, CORS origin list is hardcoded rather than env-driven).
+ 
 ---
 
 ## Technology Stack
