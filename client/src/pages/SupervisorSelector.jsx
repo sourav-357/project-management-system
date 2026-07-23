@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { UserCheck, Send, CheckCircle2, AlertCircle, Search, Filter, Lock, Clock, Sparkles } from 'lucide-react';
+import { 
+  UserCheck, Send, CheckCircle2, AlertCircle, Search, 
+  Filter, Lock, Clock, Sparkles, User, ShieldCheck 
+} from 'lucide-react';
 
 export const SupervisorSelector = () => {
   const [supervisors, setSupervisors] = useState([]);
@@ -106,8 +109,9 @@ export const SupervisorSelector = () => {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+      <div className="p-12 flex flex-col items-center justify-center min-h-[450px]">
+        <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Loading Faculty Directory...</p>
       </div>
     );
   }
@@ -120,150 +124,164 @@ export const SupervisorSelector = () => {
   const canRequestSupervisor = hasProject && isApproved && !hasSupervisor && !hasPendingRequest;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Faculty Supervisor Directory</h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Search expertise, verify supervision capacity, and request faculty guidance for your project.</p>
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Header Hero Banner */}
+      <div className="relative overflow-hidden bg-slate-900 dark:bg-slate-950 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-2xl">
+        <div className="relative z-10 space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-xs font-semibold backdrop-blur-md">
+            <UserCheck className="w-3.5 h-3.5 text-indigo-300" /> Faculty Selection & Supervision
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Supervisor Selector</h1>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+            Search faculty expertise, verify available capacity slots, and request project guidance from academic supervisors.
+          </p>
+        </div>
       </div>
 
       {statusMsg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0" />
-          <span>{statusMsg}</span>
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2.5 shadow-sm">
+          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span className="font-medium">{statusMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{errorMsg}</span>
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2.5 shadow-sm">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
+          <span className="font-medium">{errorMsg}</span>
         </div>
       )}
 
       {/* DYNAMIC ELIGIBILITY / STATUS REASON BANNERS */}
       {hasSupervisor ? (
-        <div className="p-5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0">
+        <div className="p-6 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-bold flex items-center justify-center text-base shrink-0 shadow-md">
               {mySupervisor ? mySupervisor.name.charAt(0) : 'S'}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Active Supervisor Assigned: {mySupervisor ? mySupervisor.name : 'Faculty Member'}
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Active Supervisor: {mySupervisor ? mySupervisor.name : 'Faculty Member'}
               </p>
-              <p className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5">
-                You cannot request any new supervisor because you currently have an active supervisor assigned to your project ({mySupervisor?.email || ''}).
+              <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+                Supervision is active ({mySupervisor?.email || ''}). Once your project is completed, supervision is released and you can request a new supervisor for a new project.
               </p>
             </div>
           </div>
-          <span className="px-3 py-1 bg-indigo-600 text-white font-semibold text-xs rounded-lg shrink-0 self-start sm:self-auto">
+          <span className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-2xl shrink-0 self-start sm:self-auto shadow-sm">
             Supervisor Assigned
           </span>
         </div>
       ) : hasPendingRequest ? (
-        <div className="p-5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-500 text-white font-bold flex items-center justify-center text-sm shrink-0">
-              <Clock className="w-5 h-5 text-white" />
+        <div className="p-6 bg-amber-50/80 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/80 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white font-bold flex items-center justify-center text-base shrink-0 shadow-md">
+              <Clock className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> Supervision Request Pending: Prof. {pendingRequest.supervisor?.name}
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" /> Request Pending: Prof. {pendingRequest.supervisor?.name}
               </p>
-              <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-                You currently have an active pending supervisor request sent to Prof. {pendingRequest.supervisor?.name} ({pendingRequest.supervisor?.department}). You cannot send a request to another teacher until this request is accepted or declined.
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                Your supervision request sent to Prof. {pendingRequest.supervisor?.name} is under review.
               </p>
             </div>
           </div>
-          <span className="px-3 py-1 bg-amber-500 text-white font-semibold text-xs rounded-lg shrink-0 self-start sm:self-auto">
-            Request Pending Review
+          <span className="px-4 py-2 bg-amber-500 text-white font-bold text-xs rounded-2xl shrink-0 self-start sm:self-auto shadow-sm">
+            Pending Review
           </span>
         </div>
       ) : !hasProject ? (
-        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-amber-900 dark:text-amber-200 text-xs flex items-center gap-3">
+        <div className="p-5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-3xl text-amber-900 dark:text-amber-200 text-xs flex items-center gap-3.5 shadow-sm">
           <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
           <div>
-            <p className="font-bold">No Project Proposal Submitted</p>
-            <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-0.5">
-              You must submit a project proposal before you can request a faculty supervisor. Please write and submit your proposal first.
+            <p className="font-bold text-sm">No Active Project Proposal</p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+              You must submit a project proposal before requesting a faculty supervisor.
             </p>
           </div>
         </div>
       ) : !isApproved ? (
-        <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl text-blue-900 dark:text-blue-200 text-xs flex items-center gap-3">
+        <div className="p-5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 rounded-3xl text-blue-900 dark:text-blue-200 text-xs flex items-center gap-3.5 shadow-sm">
           <Clock className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
           <div>
-            <p className="font-bold">Proposal Pending Approval (Status: {projectStatus})</p>
-            <p className="text-[11px] text-blue-700 dark:text-blue-300 mt-0.5">
-              Your project proposal is currently under evaluation. You can only request a supervisor after your project proposal is approved by faculty or admin.
+            <p className="font-bold text-sm">Proposal Under Review (Status: {projectStatus})</p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+              Supervisors can be requested once your proposal is approved by faculty or admin.
             </p>
           </div>
         </div>
       ) : (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-3">
+        <div className="p-5 bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-3xl text-emerald-900 dark:text-emerald-200 text-xs flex items-center gap-3.5 shadow-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <div>
-            <p className="font-bold">Proposal Approved & Eligible for Supervision!</p>
-            <p className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-0.5">
-              Your project proposal "{project?.title}" is approved! Select an available faculty supervisor from the directory below to send a request.
+            <p className="font-bold text-sm">Proposal Approved & Eligible for Supervision!</p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+              Your proposal "{project?.title}" is approved! Select an available supervisor below.
             </p>
           </div>
         </div>
       )}
 
       {/* Search & Filter Bar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full sm:w-96">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search name, dept, or expertise tag (e.g. AI)..."
-            className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Search by faculty name, department, or expertise tag..."
+            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
 
-        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-semibold cursor-pointer">
+        <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 font-bold cursor-pointer">
           <input
             type="checkbox"
             checked={availableOnly}
             onChange={(e) => setAvailableOnly(e.target.checked)}
-            className="rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500"
+            className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-indigo-600 focus:ring-indigo-500"
           />
-          Available Supervisees Only
+          Show Available Capacity Only
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredSupervisors.length === 0 ? (
-          <div className="col-span-full bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs">
-            No faculty members match your search terms
+          <div className="col-span-full bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
+            No faculty members match your search terms.
           </div>
         ) : (
           filteredSupervisors.map((t) => (
-            <div key={t._id} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4">
-              <div>
+            <div key={t._id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-200">
+              <div className="space-y-3">
                 <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t.name}</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{t.department || 'Computer Science'}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-md">
+                      {t.name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{t.name}</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{t.department || 'Computer Science'}</p>
+                    </div>
                   </div>
+
                   <span
-                    className={`text-[10px] font-bold px-2.5 py-1 rounded-md ${
+                    className={`inline-flex items-center text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
                       t.isAvailable
                         ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                         : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
                     }`}
                   >
-                    {t.assignedCount || 0} / {t.maxStudents || 10} Students
+                    {t.assignedCount || 0} / {t.maxStudents || 10} Slots
                   </span>
                 </div>
 
                 {t.expertise && t.expertise.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-3">
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {t.expertise.map((exp, idx) => (
-                      <span key={idx} className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-medium">
+                      <span key={idx} className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-xl font-semibold">
                         {exp}
                       </span>
                     ))}
@@ -275,28 +293,28 @@ export const SupervisorSelector = () => {
               {hasSupervisor ? (
                 <button
                   disabled
-                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                  className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-2xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
                 >
                   Supervisor Already Assigned
                 </button>
               ) : hasPendingRequest ? (
                 <button
                   disabled
-                  className="w-full py-2 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs rounded-xl cursor-not-allowed border border-amber-200 dark:border-amber-800"
+                  className="w-full py-3 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-xs rounded-2xl cursor-not-allowed border border-amber-200 dark:border-amber-800"
                 >
                   Request Pending Review
                 </button>
               ) : !hasProject ? (
                 <button
                   disabled
-                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                  className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-2xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
                 >
                   Submit Proposal First
                 </button>
               ) : !isApproved ? (
                 <button
                   disabled
-                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                  className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs rounded-2xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
                 >
                   Proposal Pending Approval
                 </button>
@@ -304,7 +322,7 @@ export const SupervisorSelector = () => {
                 <button
                   disabled={!t.isAvailable}
                   onClick={() => setSelectedTeacher(t)}
-                  className="w-full py-2 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-40"
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-2xl transition-all shadow-md shadow-indigo-600/20 disabled:opacity-40"
                 >
                   {t.isAvailable ? 'Request Supervision' : 'Capacity Full'}
                 </button>
@@ -316,21 +334,21 @@ export const SupervisorSelector = () => {
 
       {/* Modal for sending request */}
       {selectedTeacher && canRequestSupervisor && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Request Supervisor: {selectedTeacher.name}</h3>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Request Supervisor: {selectedTeacher.name}</h3>
             <textarea
               rows={4}
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
-              placeholder="Write a brief message introducing your project idea to the professor..."
-              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Write a brief note introducing your project topic to the professor..."
+              className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             ></textarea>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setSelectedTeacher(null)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl"
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700"
               >
                 Cancel
               </button>
@@ -338,7 +356,7 @@ export const SupervisorSelector = () => {
                 type="button"
                 onClick={handleSendRequest}
                 disabled={submitting}
-                className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700"
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-md disabled:opacity-50"
               >
                 {submitting ? 'Sending...' : 'Send Request'}
               </button>

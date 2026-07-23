@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
-import { User, KeyRound, ShieldAlert, Upload, CheckCircle2, AlertCircle, LogOut } from 'lucide-react';
+import { User, KeyRound, ShieldAlert, Upload, CheckCircle2, AlertCircle, LogOut, Sparkles, ShieldCheck } from 'lucide-react';
 
 export const ProfileSettings = () => {
   const { user, refreshUserData, logoutAll } = useAuth();
@@ -101,24 +101,32 @@ export const ProfileSettings = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">Account & Security Settings</h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Manage your profile details, avatar, security, and active sessions.</p>
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-slate-900 dark:bg-slate-950 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-2xl">
+        <div className="relative z-10 space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-xs font-semibold backdrop-blur-md">
+            <User className="w-3.5 h-3.5 text-indigo-300" /> Account & Security
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Profile Settings</h1>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
+            Manage your personal profile, avatar image, account password, and active security sessions.
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Profile Card */}
-        <div className="md:col-span-1 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col items-center text-center space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Profile Avatar Card */}
+        <div className="lg:col-span-1 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm flex flex-col items-center text-center space-y-4">
           <div className="relative group">
             {avatarPreview ? (
               <img
                 src={avatarPreview}
                 alt={user?.name}
-                className="w-28 h-28 rounded-full object-cover border-4 border-indigo-100 dark:border-indigo-900 shadow-md"
+                className="w-28 h-28 rounded-3xl object-cover border-4 border-indigo-100 dark:border-indigo-900 shadow-lg"
               />
             ) : (
-              <div className="w-28 h-28 rounded-full bg-indigo-600 flex items-center justify-center text-white text-3xl font-extrabold shadow-md shadow-indigo-200 dark:shadow-indigo-950">
+              <div className="w-28 h-28 rounded-3xl bg-indigo-600 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-indigo-600/30">
                 {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
               </div>
             )}
@@ -127,25 +135,25 @@ export const ProfileSettings = () => {
           <div>
             <h3 className="font-extrabold text-slate-900 dark:text-slate-100 text-base">{user?.name}</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{user?.email}</p>
-            <span className="inline-block mt-2 px-3 py-1 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold rounded-full">
-              {user?.role} • {user?.department || 'General'}
+            <span className="inline-block mt-2.5 px-3.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[10px] font-extrabold rounded-full uppercase tracking-wider">
+              {user?.role} &bull; {user?.department || 'General'}
             </span>
           </div>
 
           {/* Avatar Upload Form */}
-          <form onSubmit={handleAvatarUpload} className="w-full pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+          <form onSubmit={handleAvatarUpload} className="w-full pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
             {avatarMsg && (
-              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[11px] flex items-center gap-1.5 text-left">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> {avatarMsg}
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-[11px] flex items-center gap-2 text-left">
+                <CheckCircle2 className="w-4 h-4 shrink-0" /> {avatarMsg}
               </div>
             )}
             {avatarError && (
-              <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-[11px] flex items-center gap-1.5 text-left">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {avatarError}
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-2xl text-[11px] flex items-center gap-2 text-left">
+                <AlertCircle className="w-4 h-4 shrink-0" /> {avatarError}
               </div>
             )}
 
-            <label className="cursor-pointer block py-2 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-center">
+            <label className="cursor-pointer block py-3 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-center">
               Choose Avatar Image
               <input type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
             </label>
@@ -154,13 +162,13 @@ export const ProfileSettings = () => {
               <button
                 type="submit"
                 disabled={avatarLoading}
-                className="w-full py-2 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-200 dark:shadow-indigo-950 disabled:opacity-50"
+                className="w-full py-3 bg-indigo-600 text-white font-bold text-xs rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20 disabled:opacity-50"
               >
                 {avatarLoading ? (
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <Upload className="w-3.5 h-3.5" /> Upload Avatar
+                    <Upload className="w-4 h-4" /> Save New Avatar
                   </>
                 )}
               </button>
@@ -169,40 +177,40 @@ export const ProfileSettings = () => {
         </div>
 
         {/* Settings Forms */}
-        <div className="md:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           {/* Change Password Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-sm border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-extrabold text-sm border-b border-slate-100 dark:border-slate-800 pb-4">
               <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
               Change Password
             </div>
 
             {passMsg && (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2.5">
                 <CheckCircle2 className="w-4 h-4 shrink-0" /> {passMsg}
               </div>
             )}
             {passError && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
+              <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0" /> {passError}
               </div>
             )}
 
-            <form onSubmit={handleChangePassword} className="space-y-3.5">
+            <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Current Password</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Current Password</label>
                 <input
                   type="password"
                   required
                   value={oldPassword}
                   onChange={(e) => setOldPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">New Password</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">New Password</label>
                 <input
                   type="password"
                   required
@@ -210,12 +218,12 @@ export const ProfileSettings = () => {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="At least 8 characters"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Confirm New Password</label>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Confirm New Password</label>
                 <input
                   type="password"
                   required
@@ -223,7 +231,7 @@ export const ProfileSettings = () => {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter new password"
-                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
 
@@ -231,7 +239,7 @@ export const ProfileSettings = () => {
                 <button
                   type="submit"
                   disabled={passLoading}
-                  className="px-5 py-2.5 bg-indigo-600 text-white font-semibold text-xs rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 dark:shadow-indigo-950 disabled:opacity-50"
+                  className="px-6 py-3 bg-indigo-600 text-white font-bold text-xs rounded-2xl hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 disabled:opacity-50"
                 >
                   {passLoading ? 'Updating...' : 'Update Password'}
                 </button>
@@ -240,22 +248,22 @@ export const ProfileSettings = () => {
           </div>
 
           {/* Active Sessions & Security Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4 border-l-4 border-l-rose-500">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-sm">
-                <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-4 border-l-4 border-l-rose-500">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-extrabold text-sm">
+                <ShieldAlert className="w-4 h-4 text-rose-600" />
                 Active Sessions & Security
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-400">
+            <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               If you suspect unapproved access to your account or lost a device, you can log out from all active sessions across all devices simultaneously.
             </p>
 
             <button
               onClick={handleLogoutAllDevices}
               disabled={logoutLoading}
-              className="px-4 py-2.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900 transition-all flex items-center gap-2"
+              className="px-5 py-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 font-bold text-xs rounded-2xl hover:bg-rose-100 transition-all flex items-center gap-2 active:scale-95"
             >
               <LogOut className="w-4 h-4" />
               {logoutLoading ? 'Signing out everywhere...' : 'Sign Out of All Active Devices'}

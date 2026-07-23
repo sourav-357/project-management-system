@@ -101,10 +101,7 @@ const projectSchema = new mongoose.Schema({
                 default: Date.now,
             }
         }
-    ],
-    deadline: {
-        type: Date
-    }
+    ]
 }, { timestamps: true });
 
 // * Compound Indexes based on production query access patterns

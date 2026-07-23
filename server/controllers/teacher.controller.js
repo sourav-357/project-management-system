@@ -152,12 +152,16 @@ export const completeProject = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Only the assigned supervisor or an Admin can mark this project as completed', 403));
     }
 
+    if (project.status === PROJECT_STATUS.COMPLETED) {
+        return next(new ErrorHandler('This project is already marked as completed.', 400));
+    }
+
     project.status = PROJECT_STATUS.COMPLETED;
     await project.save();
 
-    // Release student supervisor link & teacher assignedStudents list
+    // Release student supervisor link, reset active project reference & remove from teacher assignedStudents list
     if (project.student) {
-        await User.findByIdAndUpdate(project.student, { supervisor: null });
+        await User.findByIdAndUpdate(project.student, { supervisor: null, project: null });
     }
     if (project.supervisor) {
         await User.findByIdAndUpdate(project.supervisor, {

@@ -87,6 +87,10 @@ export const uploadFiles = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Project not found', 404));
     }
 
+    if (project.status === PROJECT_STATUS.COMPLETED) {
+        return next(new ErrorHandler('This project is completed and locked into read-only history. File uploads are disabled.', 403));
+    }
+
     if (!project.supervisor && !req.user.supervisor) {
         return next(new ErrorHandler('You cannot upload files until a supervisor is assigned to your project', 400));
     }
@@ -167,10 +171,14 @@ export const requestSupervisor = asyncHandler(async (req, res, next) => {
     const studentId = req.user._id;
 
     const freshStudent = await User.findById(studentId);
-    const project = await Project.findOne({ student: studentId, isDeleted: false });
+    const project = await Project.findOne({
+        student: studentId,
+        isDeleted: false,
+        status: { $nin: [PROJECT_STATUS.COMPLETED, PROJECT_STATUS.REJECTED] }
+    }).sort({ createdAt: -1 });
 
     if (!project) {
-        return next(new ErrorHandler('Project proposal not found. You must submit a project proposal first before requesting a supervisor.', 400));
+        return next(new ErrorHandler('Active project proposal not found. You must submit a project proposal first before requesting a supervisor.', 400));
     }
 
     if (project.status !== PROJECT_STATUS.APPROVED && project.status !== 'assigned' && project.status !== 'milestone_in_progress') {
@@ -222,18 +230,22 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     const studentId = req.user._id;
     const user = await User.findById(studentId).populate('supervisor', 'name email department avatar');
 
-    const project = await Project.findOne({ student: studentId, isDeleted: false })
+    const allProjects = await Project.find({ student: studentId, isDeleted: false })
+        .sort({ createdAt: -1 })
         .populate('supervisor', 'name email avatar')
         .lean();
 
-    const feedbackNotifications = project?.feedback && project.feedback.length > 0
-        ? [...project.feedback].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3)
+    const activeProject = allProjects.find(p => p.status !== PROJECT_STATUS.COMPLETED && p.status !== PROJECT_STATUS.REJECTED) || null;
+    const projectsHistory = allProjects;
+
+    const feedbackNotifications = activeProject?.feedback && activeProject.feedback.length > 0
+        ? [...activeProject.feedback].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 3)
         : [];
 
     res.status(200).json({
         success: true,
         message: 'Dashboard stats fetched successfully',
-        data: { user, project, feedbackNotifications },
+        data: { user, project: activeProject, projectsHistory, feedbackNotifications },
     });
 });
 

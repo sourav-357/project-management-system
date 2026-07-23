@@ -24,46 +24,51 @@ export const getAvailableInvitees = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 1. Create & Schedule Meeting (Host Only)
+// * 1. Create & Start Meeting (Simple Meeting: Title, Description, Invited Users)
 export const createMeeting = asyncHandler(async (req, res, next) => {
-    const { title, description, scheduledAt, maxParticipants, invitees } = req.body;
+    const { title, description, invitees, invitedUserIds } = req.body;
     const hostId = req.user._id;
 
-    if (!title || !scheduledAt) {
-        return next(new ErrorHandler('Title and scheduled date/time are required', 400));
+    if (!title || !title.trim()) {
+        return next(new ErrorHandler('Meeting title is required', 400));
     }
+
+    const inviteesList = (invitedUserIds && Array.isArray(invitedUserIds))
+        ? invitedUserIds
+        : (invitees && Array.isArray(invitees))
+        ? invitees
+        : [];
 
     const meeting = await Meeting.create({
         host: hostId,
         title: title.trim(),
         description: description ? description.trim() : '',
-        scheduledAt: new Date(scheduledAt),
-        maxParticipants: maxParticipants || 10,
-        invitees: invitees && Array.isArray(invitees) ? invitees : [],
-        status: 'scheduled',
+        invitedUsers: inviteesList,
+        status: 'active',
+        startedAt: new Date(),
     });
 
     res.status(201).json({
         success: true,
-        message: 'Meeting scheduled successfully',
+        message: 'Meeting started successfully',
         data: { meeting },
     });
 });
 
-// * 2. Get Upcoming & Active Meetings for Current User
+// * 2. Get Active Meetings for Current User
 export const getMyMeetings = asyncHandler(async (req, res, next) => {
     const userId = req.user._id;
 
     const meetings = await Meeting.find({
         $or: [
             { host: userId },
-            { invitees: userId }
+            { invitedUsers: userId }
         ],
-        status: { $in: ['scheduled', 'ongoing'] }
+        status: { $in: ['scheduled', 'active'] }
     })
         .populate('host', 'name email avatar department role')
-        .populate('invitees', 'name email avatar department role')
-        .sort({ scheduledAt: 1 })
+        .populate('invitedUsers', 'name email avatar department role')
+        .sort({ createdAt: -1 })
         .lean();
 
     res.status(200).json({
@@ -79,8 +84,7 @@ export const getMeetingById = asyncHandler(async (req, res, next) => {
 
     const meeting = await Meeting.findById(meetingId)
         .populate('host', 'name email avatar department role')
-        .populate('invitees', 'name email avatar department role')
-        .populate('participants', 'name email avatar department role')
+        .populate('invitedUsers', 'name email avatar department role')
         .lean();
 
     if (!meeting) {
@@ -113,15 +117,10 @@ export const joinMeeting = asyncHandler(async (req, res, next) => {
     }
 
     if (meeting.status === 'scheduled') {
-        meeting.status = 'ongoing';
+        meeting.status = 'active';
         meeting.startedAt = new Date();
+        await meeting.save();
     }
-
-    if (!meeting.participants.includes(userId)) {
-        meeting.participants.push(userId);
-    }
-
-    await meeting.save();
 
     res.status(200).json({
         success: true,
@@ -133,21 +132,11 @@ export const joinMeeting = asyncHandler(async (req, res, next) => {
 // * 5. Leave Meeting
 export const leaveMeeting = asyncHandler(async (req, res, next) => {
     const { meetingId } = req.params;
-    const userId = req.user._id;
 
     const meeting = await Meeting.findById(meetingId);
     if (!meeting) {
         return next(new ErrorHandler('Meeting not found', 404));
     }
-
-    meeting.participants = meeting.participants.filter(p => p.toString() !== userId.toString());
-
-    if (meeting.participants.length === 0 && meeting.status === 'ongoing') {
-        meeting.status = 'ended';
-        meeting.endedAt = new Date();
-    }
-
-    await meeting.save();
 
     res.status(200).json({
         success: true,
@@ -174,8 +163,8 @@ export const endMeeting = asyncHandler(async (req, res, next) => {
     meeting.endedAt = new Date();
     await meeting.save();
 
-    // Update CallHistory record
-    const durationSeconds = Math.round((new Date() - new Date(meeting.startedAt)) / 1000);
+    // Update CallHistory record if any
+    const durationSeconds = Math.round((new Date() - new Date(meeting.startedAt || meeting.createdAt)) / 1000);
     await CallHistory.updateMany(
         { title: meeting.title, status: 'ongoing' },
         { status: 'completed', endedAt: new Date(), durationSeconds }

@@ -227,6 +227,10 @@ export const reviewProposalAdmin = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Project not found', 404));
     }
 
+    if (project.status === 'completed') {
+        return next(new ErrorHandler('Completed projects are locked into history and cannot be modified by anyone.', 403));
+    }
+
     project.status = status;
     if (remarks) {
         project.feedback.push({
@@ -253,6 +257,10 @@ export const assignSupervisor = asyncHandler(async (req, res, next) => {
     const project = await Project.findById(projectId);
     if (!project) {
         return next(new ErrorHandler('Project not found', 404));
+    }
+
+    if (project.status === 'completed') {
+        return next(new ErrorHandler('Completed projects are locked into history and cannot be re-assigned.', 403));
     }
 
     if (project.status !== 'approved' && project.status !== 'assigned') {
