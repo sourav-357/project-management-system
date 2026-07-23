@@ -43,6 +43,8 @@ export const registerUser = asyncHandler(async (req, res, next) => {
 
 // * Login User
 export const login = asyncHandler(async (req, res, next) => {
+    console.log("LOGIN CONTROLLER ENTERED");
+    console.log(req.body);
     const { password, role } = req.body;
     const email = req.body.email;
 
