@@ -84,16 +84,16 @@ app.use(cors({
     credentials: true,
 }));
 
-// Uploads static directory setup
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDir = path.join(__dirname, 'uploads');
-const tempDir = path.join(__dirname, 'uploads/temp');
+// // Uploads static directory setup
+// const __filename = fileURLToPath(import.meta.url);
+// const __dirname = path.dirname(__filename);
+// const uploadsDir = path.join(__dirname, 'uploads');
+// const tempDir = path.join(__dirname, 'uploads/temp');
 
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+// if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+// if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-app.use('/uploads', express.static(uploadsDir));
+// app.use('/uploads', express.static(uploadsDir));
 
 // Routes
 app.use('/api/v1/auth', authRouter);
