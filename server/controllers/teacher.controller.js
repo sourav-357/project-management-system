@@ -21,13 +21,21 @@ export const getIncomingRequests = asyncHandler(async (req, res, next) => {
 // * Respond to Supervisor Request (Accept or Reject Supervisor Request)
 export const respondToRequest = asyncHandler(async (req, res, next) => {
     const { requestId } = req.params;
-    const { action } = req.body; // 'accept' or 'reject'
+    const actionInput = req.body.action || req.body.status;
 
-    if (!action || !['accept', 'reject'].includes(action)) {
+    if (!actionInput) {
         return next(new ErrorHandler('Please specify action as "accept" or "reject"', 400));
     }
 
-    if (action === 'accept') {
+    const cleanAction = String(actionInput).toLowerCase();
+    const isAccept = ['accept', 'approved', 'accepted', 'approve'].includes(cleanAction);
+    const isReject = ['reject', 'rejected', 'decline', 'declined'].includes(cleanAction);
+
+    if (!isAccept && !isReject) {
+        return next(new ErrorHandler('Invalid action specified. Must be accept or reject.', 400));
+    }
+
+    if (isAccept) {
         const { request } = await teacherService.acceptSupervisorRequestAtomic(requestId, req.user._id);
 
         return res.status(200).json({
@@ -40,7 +48,7 @@ export const respondToRequest = asyncHandler(async (req, res, next) => {
 
         return res.status(200).json({
             success: true,
-            message: 'Supervisor request rejected',
+            message: 'Supervisor request rejected successfully',
             data: { request },
         });
     }
@@ -101,7 +109,11 @@ export const getSupervisedProjects = asyncHandler(async (req, res, next) => {
 // * Review Proposal Status (Teachers can ONLY approve proposals, never reject)
 export const reviewProposal = asyncHandler(async (req, res, next) => {
     const { projectId } = req.params;
-    const { status, remarks } = req.body;
+    const inputStatus = req.body.status || req.body.action;
+
+    let status = inputStatus;
+    if (status === 'approve') status = 'approved';
+    if (status === 'reject') status = 'rejected';
 
     if (status === 'rejected' && req.user.role !== 'Admin') {
         return next(new ErrorHandler('Teachers cannot reject project proposals. You can only approve proposals or drop student supervision.', 403));
@@ -121,12 +133,16 @@ export const reviewProposal = asyncHandler(async (req, res, next) => {
     }
 
     project.status = PROJECT_STATUS.APPROVED;
-    if (remarks) {
+    if (!project.supervisor) {
+        project.supervisor = req.user._id;
+    }
+
+    if (req.body.remarks) {
         project.feedback.push({
             supervisorId: req.user._id,
             type: 'positive',
             title: 'Proposal Evaluation (APPROVED)',
-            message: remarks,
+            message: req.body.remarks,
         });
     }
 
@@ -142,13 +158,30 @@ export const reviewProposal = asyncHandler(async (req, res, next) => {
 // * Complete Project (Teacher / Admin Only)
 export const completeProject = asyncHandler(async (req, res, next) => {
     const { projectId } = req.params;
+    const teacherId = req.user._id.toString();
 
     const project = await Project.findById(projectId);
     if (!project) {
         return next(new ErrorHandler('Project not found', 404));
     }
 
-    if (req.user.role !== 'Admin' && (!project.supervisor || project.supervisor.toString() !== req.user._id.toString())) {
+    // Check authorization: direct supervisor reference OR student's assigned supervisor OR in assignedStudents list
+    const isDirectSupervisor = project.supervisor && project.supervisor.toString() === teacherId;
+    let isAuthorizedSupervisor = isDirectSupervisor;
+
+    if (!isAuthorizedSupervisor && project.student) {
+        const studentObj = await User.findById(project.student).select('supervisor');
+        if (studentObj && studentObj.supervisor && studentObj.supervisor.toString() === teacherId) {
+            isAuthorizedSupervisor = true;
+        }
+
+        const teacherObj = await User.findById(teacherId).select('assignedStudents');
+        if (teacherObj && teacherObj.assignedStudents && teacherObj.assignedStudents.some(id => id.toString() === project.student.toString())) {
+            isAuthorizedSupervisor = true;
+        }
+    }
+
+    if (req.user.role !== 'Admin' && !isAuthorizedSupervisor) {
         return next(new ErrorHandler('Only the assigned supervisor or an Admin can mark this project as completed', 403));
     }
 
@@ -157,14 +190,17 @@ export const completeProject = asyncHandler(async (req, res, next) => {
     }
 
     project.status = PROJECT_STATUS.COMPLETED;
+    if (!project.supervisor) {
+        project.supervisor = req.user._id;
+    }
     await project.save();
 
     // Release student supervisor link, reset active project reference & remove from teacher assignedStudents list
     if (project.student) {
         await User.findByIdAndUpdate(project.student, { supervisor: null, project: null });
     }
-    if (project.supervisor) {
-        await User.findByIdAndUpdate(project.supervisor, {
+    if (req.user._id) {
+        await User.findByIdAndUpdate(req.user._id, {
             $pull: { assignedStudents: project.student }
         });
     }

@@ -1,683 +1,488 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { useAuth } from '../context/AuthContext';
-import {
-  Users, UserCheck, UserPlus, UserMinus, UserX, Clock, 
-  ShieldOff, Check, X, Ban, Search, Filter, AlertCircle, 
-  CheckCircle2, MessageSquare, Trash2, Sparkles, ShieldCheck
-} from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
+import { useNavigate } from 'react-router-dom';
+import { Users, UserPlus, Check, X, ShieldAlert, Search, MessageSquare, Clock, UserMinus, CheckCircle2, AlertCircle, History, ShieldOff, Sparkles } from 'lucide-react';
 
 export const Connections = () => {
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('my-connections'); // 'my-connections', 'explore', 'pending', 'history'
+  const { onlineUsers } = useSocket();
 
-  // My Connections state
-  const [connectedUsers, setConnectedUsers] = useState([]);
-  const [connectedLoading, setConnectedLoading] = useState(false);
-
-  // Explore state
+  const [activeTab, setActiveTab] = useState('explore');
+  const [connections, setConnections] = useState([]);
   const [exploreUsers, setExploreUsers] = useState([]);
-  const [roleFilter, setRoleFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [exploreLoading, setExploreLoading] = useState(false);
-
-  // Pending requests state
-  const [incoming, setIncoming] = useState([]);
-  const [outgoing, setOutgoing] = useState([]);
-  const [pendingLoading, setPendingLoading] = useState(false);
-
-  // History & Blocked state
-  const [history, setHistory] = useState([]);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [outgoingRequests, setOutgoingRequests] = useState([]);
   const [blockedUsers, setBlockedUsers] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
-  // Action messages
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
+  const [historyLog, setHistoryLog] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('All');
+  const [actionMsg, setActionMsg] = useState('');
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
-    fetchPendingRequests();
+    fetchAllData();
+  }, [search, roleFilter]);
 
-    if (activeTab === 'my-connections') fetchMyConnections();
-    else if (activeTab === 'explore') fetchExploreUsers();
-    else if (activeTab === 'pending') fetchPendingRequests();
-    else if (activeTab === 'history') fetchHistoryAndBlocked();
-  }, [activeTab, roleFilter]);
+  const fetchAllData = async () => {
+    setLoading(true);
+    setActionMsg('');
+    setActionError('');
 
-  const fetchMyConnections = async () => {
     try {
-      setConnectedLoading(true);
-      const res = await api.get('/connections/my-connections');
-      setConnectedUsers(res.data.data.connections || []);
-    } catch (err) {
-      console.error('Error fetching my connections:', err);
-    } finally {
-      setConnectedLoading(false);
-    }
-  };
+      const params = {};
+      if (search) params.search = search;
+      if (roleFilter !== 'All') params.role = roleFilter;
 
-  const fetchExploreUsers = async () => {
-    try {
-      setExploreLoading(true);
-      const res = await api.get('/connections/explore', {
-        params: {
-          role: roleFilter === 'All' ? undefined : roleFilter,
-          search: searchQuery.trim() || undefined,
-        },
-      });
-      setExploreUsers(res.data.data.users || []);
-    } catch (err) {
-      console.error('Error fetching explore users:', err);
-    } finally {
-      setExploreLoading(false);
-    }
-  };
-
-  const fetchPendingRequests = async () => {
-    try {
-      setPendingLoading(true);
-      const res = await api.get('/connections/pending');
-      setIncoming(res.data.data.incoming || []);
-      setOutgoing(res.data.data.outgoing || []);
-    } catch (err) {
-      console.error('Error fetching pending requests:', err);
-    } finally {
-      setPendingLoading(false);
-    }
-  };
-
-  const fetchHistoryAndBlocked = async () => {
-    try {
-      setHistoryLoading(true);
-      const [histRes, blockedRes] = await Promise.all([
-        api.get('/connections/history'),
-        api.get('/connections/blocked'),
+      const [myConnRes, expRes, pendRes, blockRes, histRes] = await Promise.all([
+        api.get('/connections/my-connections').catch(() => api.get('/connections/friends').catch(() => ({ data: { data: { connections: [] } } }))),
+        api.get('/connections/explore', { params }).catch(() => ({ data: { data: { users: [] } } })),
+        api.get('/connections/pending').catch(() => ({ data: { data: { incoming: [], outgoing: [] } } })),
+        api.get('/connections/blocked').catch(() => ({ data: { data: { blockedUsers: [] } } })),
+        api.get('/connections/history').catch(() => ({ data: { data: { history: [] } } })),
       ]);
-      setHistory(histRes.data.data.history || []);
-      setBlockedUsers(blockedRes.data.data.blockedUsers || []);
+
+      const myConnList = myConnRes.data?.data?.connections || myConnRes.data?.data?.friends || [];
+      const expList = expRes.data?.data?.users || [];
+      const incList = pendRes.data?.data?.incoming || [];
+      const outList = pendRes.data?.data?.outgoing || [];
+      const blkList = blockRes.data?.data?.blockedUsers || [];
+      const histList = histRes.data?.data?.history || [];
+
+      setConnections(myConnList);
+      setExploreUsers(expList);
+      setIncomingRequests(incList);
+      setOutgoingRequests(outList);
+      setBlockedUsers(blkList);
+      setHistoryLog(histList);
     } catch (err) {
-      console.error('Error fetching history:', err);
+      console.error('Error loading connections data:', err);
     } finally {
-      setHistoryLoading(false);
+      setLoading(false);
     }
   };
 
   const handleSendRequest = async (recipientId) => {
-    setMsg('');
-    setError('');
+    setActionMsg('');
+    setActionError('');
     try {
       const res = await api.post('/connections/request', { recipientId });
-      setMsg(res.data.message || 'Connection request sent');
-      fetchExploreUsers();
-      fetchPendingRequests();
+      setActionMsg(res.data.message || 'Connection request sent successfully');
+      fetchAllData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send connection request');
+      setActionError(err.response?.data?.message || 'Failed to send connection request');
     }
   };
 
-  const handleRespond = async (connectionId, action) => {
-    setMsg('');
-    setError('');
+  const handleRespondRequest = async (connectionId, action) => {
+    setActionMsg('');
+    setActionError('');
     try {
       const res = await api.put(`/connections/respond/${connectionId}`, { action });
-      setMsg(res.data.message || `Connection ${action}ed`);
-      fetchPendingRequests();
+      setActionMsg(res.data.message || `Request ${action}ed`);
+      fetchAllData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Action failed');
+      setActionError(err.response?.data?.message || 'Failed to respond to request');
     }
   };
 
-  const handleRemoveConnection = async (targetUserId, targetName) => {
-    if (!window.confirm(`Are you sure you want to delete your connection with ${targetName || 'this user'}? You will no longer be able to direct message until re-connected.`)) return;
-    setMsg('');
-    setError('');
+  const handleRemoveConnection = async (targetUserId, name) => {
+    if (!window.confirm(`Remove connection with ${name}?`)) return;
+    setActionMsg('');
+    setActionError('');
     try {
-      await api.delete(`/connections/remove/${targetUserId}`);
-      setMsg(`Connection with ${targetName || 'user'} removed successfully.`);
-      if (activeTab === 'my-connections') fetchMyConnections();
-      else if (activeTab === 'explore') fetchExploreUsers();
-      else if (activeTab === 'history') fetchHistoryAndBlocked();
+      const res = await api.delete(`/connections/remove/${targetUserId}`);
+      setActionMsg(res.data.message || `Removed connection with ${name}`);
+      fetchAllData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete connection');
+      setActionError(err.response?.data?.message || 'Failed to remove connection');
     }
   };
 
-  const handleCancelOutgoingRequest = async (recipientId, recipientName) => {
-    if (!window.confirm(`Cancel your pending connection request to ${recipientName || 'this user'}?`)) return;
-    setMsg('');
-    setError('');
+  const handleBlockUser = async (targetUserId, name) => {
+    if (!window.confirm(`Block ${name}? You will no longer be able to message or connect.`)) return;
+    setActionMsg('');
+    setActionError('');
     try {
-      await api.delete(`/connections/remove/${recipientId}`);
-      setMsg(`Connection request to ${recipientName || 'user'} has been cancelled.`);
-      fetchPendingRequests();
+      const res = await api.put(`/connections/block-user/${targetUserId}`);
+      setActionMsg(res.data.message || `Blocked ${name}`);
+      fetchAllData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to cancel connection request');
+      setActionError(err.response?.data?.message || 'Failed to block user');
     }
   };
 
-  const handleBlockUser = async (connectionId, targetUserId) => {
-    if (!window.confirm('Are you sure you want to block this user? They will not be able to connect or message you.')) return;
-    setMsg('');
-    setError('');
+  const handleUnblockUser = async (targetUserId, name) => {
+    setActionMsg('');
+    setActionError('');
     try {
-      if (connectionId) {
-        await api.put(`/connections/respond/${connectionId}`, { action: 'block' });
-      } else {
-        const reqRes = await api.post('/connections/request', { recipientId: targetUserId });
-        if (reqRes.data.data.connection?._id) {
-          await api.put(`/connections/respond/${reqRes.data.data.connection._id}`, { action: 'block' });
-        }
-      }
-      setMsg('User blocked successfully');
-      if (activeTab === 'my-connections') fetchMyConnections();
-      else if (activeTab === 'explore') fetchExploreUsers();
-      else if (activeTab === 'pending') fetchPendingRequests();
-      else fetchHistoryAndBlocked();
+      const res = await api.put(`/connections/unblock/${targetUserId}`);
+      setActionMsg(res.data.message || `Unblocked ${name}`);
+      fetchAllData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to block user');
-    }
-  };
-
-  const handleUnblock = async (targetUserId) => {
-    setMsg('');
-    setError('');
-    try {
-      await api.put(`/connections/unblock/${targetUserId}`);
-      setMsg('User unblocked successfully');
-      fetchHistoryAndBlocked();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to unblock user');
+      setActionError(err.response?.data?.message || 'Failed to unblock user');
     }
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-6 max-w-6xl mx-auto text-slate-900 dark:text-slate-100 transition-colors">
       {/* Header Banner */}
-      <div className="relative overflow-hidden bg-slate-900 dark:bg-slate-950 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-2xl">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-xs font-semibold backdrop-blur-md">
-              <Users className="w-3.5 h-3.5 text-indigo-300" /> Academic Peer Network
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Connections & Directory</h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Connect with academic peers, faculty supervisors, and collaborators across departments.
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/chat')}
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs rounded-2xl shadow-xl shadow-indigo-600/30 transition-all flex items-center gap-2 shrink-0 self-start md:self-auto"
-          >
-            <MessageSquare className="w-4 h-4" /> Open Direct Chat
-          </button>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 flex flex-col md:flex-row justify-between md:items-center gap-4 shadow-sm">
+        <div>
+          <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Academic Network</span>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Connections & Peer Directory</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Discover peers, manage connection requests, block/unblock users, and build collaboration networks.</p>
+        </div>
+
+        {/* Tab Controls */}
+        <div className="flex flex-wrap bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold">
+          {[
+            { id: 'explore', label: `Explore Directory (${exploreUsers.length})` },
+            { id: 'connections', label: `My Connections (${connections.length})` },
+            { id: 'pending', label: `Pending (${incomingRequests.length + outgoingRequests.length})` },
+            { id: 'blocked', label: `Blocked (${blockedUsers.length})` },
+            { id: 'history', label: 'History' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === tab.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {msg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between gap-2 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="font-medium">{msg}</span>
-          </div>
-          <button onClick={() => setMsg('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+      {actionMsg && (
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{actionMsg}</span>
         </div>
       )}
 
-      {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center justify-between gap-2 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            <span className="font-medium">{error}</span>
-          </div>
-          <button onClick={() => setError('')} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+      {actionError && (
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
         </div>
       )}
 
-      {/* Main Tabs Navigation */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          onClick={() => setActiveTab('my-connections')}
-          className={`px-5 py-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 shrink-0 ${
-            activeTab === 'my-connections'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <UserCheck className="w-4 h-4" /> My Connections
-          {connectedUsers.length > 0 && (
-            <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black">
-              {connectedUsers.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('explore')}
-          className={`px-5 py-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 shrink-0 ${
-            activeTab === 'explore'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <Search className="w-4 h-4" /> Explore Network
-        </button>
-
-        <button
-          onClick={() => setActiveTab('pending')}
-          className={`px-5 py-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 shrink-0 ${
-            activeTab === 'pending'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <Clock className="w-4 h-4" /> Pending Requests
-          {incoming.length > 0 && (
-            <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center font-black animate-pulse">
-              {incoming.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`px-5 py-3 text-xs font-extrabold transition-all border-b-2 flex items-center gap-2 shrink-0 ${
-            activeTab === 'history'
-              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          <ShieldOff className="w-4 h-4" /> History & Blocked
-        </button>
-      </div>
-
-      {/* TAB 1: MY CONNECTIONS */}
-      {activeTab === 'my-connections' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-emerald-500" /> Active Peers ({connectedUsers.length})
-            </h2>
+      {/* Main Content Area */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4 shadow-sm">
+        {loading ? (
+          <div className="p-12 flex justify-center">
+            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
           </div>
-
-          {connectedLoading ? (
-            <div className="p-12 flex flex-col items-center justify-center min-h-[300px]">
-              <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin"></div>
-            </div>
-          ) : connectedUsers.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 space-y-3 shadow-sm">
-              <Users className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700" />
-              <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">No active connections yet</h3>
-              <p className="text-xs max-w-sm mx-auto">Explore the peer network to send connection requests to students and faculty supervisors.</p>
-              <button
-                onClick={() => setActiveTab('explore')}
-                className="px-5 py-2.5 bg-indigo-600 text-white font-bold text-xs rounded-2xl hover:bg-indigo-700 transition-all inline-flex items-center gap-2 shadow-md"
-              >
-                <Search className="w-4 h-4" /> Explore Network
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {connectedUsers.map((u) => (
-                <div
-                  key={u._id}
-                  className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all"
-                >
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm border border-indigo-400 overflow-hidden shrink-0 shadow-md">
-                      {u.avatar ? (
-                        <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
-                      ) : (
-                        u.name ? u.name.charAt(0).toUpperCase() : 'U'
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{u.name}</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{u.email}</p>
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-extrabold uppercase tracking-wider">
-                          {u.role} &bull; {u.department || 'General'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => navigate('/chat')}
-                      className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-2 shadow-md shadow-indigo-600/20"
-                    >
-                      <MessageSquare className="w-4 h-4" /> Message
-                    </button>
-
-                    <button
-                      onClick={() => handleRemoveConnection(u._id, u.name)}
-                      className="p-2.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-2xl transition-all border border-slate-200 dark:border-slate-800"
-                      title="Delete Connection"
-                    >
-                      <UserMinus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: EXPLORE NETWORK */}
-      {activeTab === 'explore' && (
-        <div className="space-y-6">
-          {/* Controls: Role Filter & Search */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between gap-4">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search users by name, email, or department..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && fetchExploreUsers()}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-
-            <div className="flex gap-1.5 shrink-0">
-              {['All', 'Student', 'Teacher', 'Admin'].map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRoleFilter(r)}
-                  className={`px-4 py-2 text-xs font-bold rounded-2xl transition-all border ${
-                    roleFilter === r
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Explore Users Grid */}
-          {exploreLoading ? (
-            <div className="p-12 flex flex-col items-center justify-center min-h-[300px]">
-              <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin"></div>
-            </div>
-          ) : exploreUsers.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-              No users found matching criteria.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {exploreUsers.map((u) => (
-                <div
-                  key={u._id}
-                  className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-4 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all"
-                >
-                  <div className="flex items-start gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm border border-indigo-400 overflow-hidden shrink-0 shadow-md">
-                      {u.avatar ? (
-                        <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
-                      ) : (
-                        u.name ? u.name.charAt(0).toUpperCase() : 'U'
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{u.name}</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{u.email}</p>
-                      <span className="inline-block mt-2 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-extrabold uppercase">
-                        {u.role} &bull; {u.department || 'General'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Actions & Status */}
-                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                    {u.connectionStatus === 'accepted' ? (
-                      <span className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-2xl flex items-center gap-1.5">
-                        <Check className="w-4 h-4" /> Connected
-                      </span>
-                    ) : u.connectionStatus === 'pending' ? (
-                      <span className="px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold rounded-2xl flex items-center gap-1.5">
-                        <Clock className="w-4 h-4" /> Request Pending
-                      </span>
-                    ) : u.connectionStatus === 'blocked' ? (
-                      <span className="px-3.5 py-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold rounded-2xl flex items-center gap-1.5">
-                        <Ban className="w-4 h-4" /> Blocked
-                      </span>
-                    ) : u.cooldownDaysRemaining > 0 ? (
-                      <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2.5 rounded-2xl border border-rose-200 dark:border-rose-900">
-                        Cooldown: {u.cooldownDaysRemaining} day(s)
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleSendRequest(u._id)}
-                        className="px-4 py-2 bg-indigo-600 text-white font-bold text-xs rounded-2xl hover:bg-indigo-700 transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
-                      >
-                        <UserPlus className="w-4 h-4" /> Connect
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => handleBlockUser(u.connectionId, u._id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-2xl transition-all"
-                      title="Block User"
-                    >
-                      <Ban className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: PENDING REQUESTS */}
-      {activeTab === 'pending' && (
-        <div className="space-y-8">
-          {/* Incoming Requests */}
+        ) : activeTab === 'explore' ? (
+          /* TAB 1: Explore Network Directory */
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-500" /> Incoming Connection Requests ({incoming.length})
-              </h2>
-            </div>
-
-            {incoming.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-                No incoming pending connection requests.
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search users by name, email, department..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
               </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {incoming.map((req) => (
-                  <div
-                    key={req._id}
-                    className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 border-l-indigo-600"
+
+              <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold shrink-0">
+                {['All', 'Student', 'Teacher', 'Admin'].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setRoleFilter(r)}
+                    className={`px-3 py-1 rounded-lg transition-all ${
+                      roleFilter === r ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
                   >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-black flex items-center justify-center text-sm overflow-hidden shrink-0 shadow-md">
-                        {req.requester?.avatar ? (
-                          <img src={req.requester.avatar} alt={req.requester.name} className="w-full h-full object-cover" />
-                        ) : (
-                          req.requester?.name?.charAt(0).toUpperCase() || 'U'
-                        )}
-                      </div>
-
-                      <div className="space-y-1">
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                          {req.requester?.name}
-                        </h4>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {req.requester?.role} &bull; {req.requester?.department || 'General'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleRespond(req._id, 'accept')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-2xl shadow-md transition-all flex items-center gap-1.5 active:scale-95"
-                      >
-                        <Check className="w-4 h-4" /> Accept
-                      </button>
-                      <button
-                        onClick={() => handleRespond(req._id, 'reject')}
-                        className="px-4 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-bold text-xs rounded-2xl border border-rose-200 dark:border-rose-900 transition-all flex items-center gap-1.5"
-                      >
-                        <X className="w-4 h-4" /> Decline
-                      </button>
-                    </div>
-                  </div>
+                    {r}
+                  </button>
                 ))}
               </div>
-            )}
-          </div>
-
-          {/* Outgoing Requests */}
-          <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-slate-500" /> Outgoing Sent Requests ({outgoing.length})
-              </h2>
             </div>
 
-            {outgoing.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-                No outgoing pending requests.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {outgoing.map((req) => (
-                  <div
-                    key={req._id}
-                    className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-2xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-xs overflow-hidden shrink-0">
-                        {req.recipient?.avatar ? (
-                          <img src={req.recipient.avatar} alt={req.recipient.name} className="w-full h-full object-cover" />
-                        ) : (
-                          req.recipient?.name?.charAt(0) || 'U'
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{req.recipient?.name}</h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{req.recipient?.role} &bull; Sent {new Date(req.createdAt).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleCancelOutgoingRequest(req.recipient._id || req.recipient, req.recipient?.name)}
-                      className="px-3.5 py-2 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 font-bold text-xs rounded-2xl transition-all flex items-center gap-1.5"
-                    >
-                      <UserX className="w-4 h-4" /> Cancel
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: HISTORY & BLOCKED USERS */}
-      {activeTab === 'history' && (
-        <div className="space-y-8">
-          {/* Connection Request History */}
-          <div className="space-y-4">
-            <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
-              Connection Requests History Logs
-            </h2>
-
-            {history.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-                No past connection history recorded.
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-                {history.map((item) => {
-                  const isRequester = item.requester?._id === user._id;
-                  const partner = isRequester ? item.recipient : item.requester;
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 pt-2">
+              {exploreUsers.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500 col-span-full">No users found matching search filters.</div>
+              ) : (
+                exploreUsers.map((u) => {
+                  const isOnline = onlineUsers.has(u._id);
 
                   return (
-                    <div key={item._id} className="p-5 flex items-center justify-between hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-md">
-                          {partner?.name?.charAt(0) || 'U'}
+                    <div key={u._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="relative shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-800 dark:text-slate-200 overflow-hidden">
+                            {u.avatar ? (
+                              <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" />
+                            ) : (
+                              u.name?.charAt(0) || 'U'
+                            )}
+                          </div>
+                          <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 ${isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'}`} />
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900 dark:text-slate-100">{partner?.name}</p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {isRequester ? 'Sent by you' : 'Received by you'} &bull; {new Date(item.updatedAt).toLocaleDateString()}
-                          </p>
+                        <div className="overflow-hidden">
+                          <p className="font-bold text-slate-900 dark:text-slate-200 text-xs truncate">{u.name}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">{u.email}</p>
+                          <span className="inline-block text-[9px] font-bold text-indigo-600 dark:text-indigo-400">{u.role} &bull; {u.department || 'CS'}</span>
                         </div>
                       </div>
 
-                      <div>
-                        {item.status === 'accepted' ? (
-                          <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-extrabold rounded-full">
-                            Connected
+                      <div className="flex gap-2 items-center pt-1">
+                        {u.connectionStatus === 'accepted' ? (
+                          <button
+                            onClick={() => navigate('/chat')}
+                            className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1 shadow-sm"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" /> Message
+                          </button>
+                        ) : u.connectionStatus === 'pending' ? (
+                          <span className="flex-1 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-[11px] font-bold text-center">
+                            {u.isRequester ? 'Request Sent' : 'Pending Action'}
                           </span>
-                        ) : item.status === 'rejected' ? (
-                          <span className="px-3 py-1 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px] font-extrabold rounded-full">
-                            Rejected
-                          </span>
+                        ) : u.canRequest ? (
+                          <button
+                            onClick={() => handleSendRequest(u._id)}
+                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1 shadow-sm"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" /> Connect
+                          </button>
                         ) : (
-                          <span className="px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-[11px] font-extrabold rounded-full">
-                            Pending
+                          <span className="flex-1 py-1.5 bg-slate-200 dark:bg-slate-800 text-slate-500 text-[11px] font-semibold rounded-xl text-center">
+                            {u.cooldownDaysRemaining > 0 ? `Cooldown (${u.cooldownDaysRemaining}d)` : 'Unavailable'}
                           </span>
                         )}
+
+                        <button
+                          onClick={() => handleBlockUser(u._id, u.name)}
+                          className="px-2.5 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 text-xs font-semibold rounded-xl"
+                          title="Block User"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
           </div>
-
-          {/* Blocked Users Section */}
-          <div className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <h2 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <Ban className="w-4 h-4 text-rose-500" /> Blocked Users Directory ({blockedUsers.length})
-            </h2>
-
-            {blockedUsers.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-                No blocked users in your block list.
+        ) : activeTab === 'connections' ? (
+          /* TAB 2: My Connections */
+          <div className="divide-y divide-slate-200 dark:divide-slate-800">
+            {connections.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500 space-y-3">
+                <p>No active connected peers yet.</p>
+                <button
+                  onClick={() => setActiveTab('explore')}
+                  className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl shadow-sm hover:bg-indigo-500"
+                >
+                  Explore Directory to Connect
+                </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {blockedUsers.map((bUser) => (
-                  <div
-                    key={bUser._id}
-                    className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-2xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold flex items-center justify-center text-xs overflow-hidden shrink-0">
-                        {bUser.name?.charAt(0) || 'U'}
+              connections.map((partner) => {
+                const isOnline = onlineUsers.has(partner._id);
+
+                return (
+                  <div key={partner._id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="relative shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-800 dark:text-slate-200 overflow-hidden">
+                          {partner.avatar ? (
+                            <img src={partner.avatar} alt={partner.name} className="w-full h-full object-cover" />
+                          ) : (
+                            partner.name?.charAt(0) || 'U'
+                          )}
+                        </div>
+                        <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 ${isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'}`} />
                       </div>
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{bUser.name}</h4>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{bUser.role} &bull; {bUser.email}</p>
+                        <p className="font-bold text-slate-900 dark:text-slate-200">{partner.name}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{partner.email} &bull; {partner.role} &bull; {partner.department || 'CS'}</p>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleUnblock(bUser._id)}
-                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-                    >
-                      Unblock
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigate('/chat')}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold flex items-center gap-1 shadow-sm"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" /> Message
+                      </button>
+                      <button
+                        onClick={() => handleRemoveConnection(partner._id, partner.name)}
+                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold flex items-center gap-1"
+                      >
+                        <UserMinus className="w-3.5 h-3.5" /> Remove
+                      </button>
+                      <button
+                        onClick={() => handleBlockUser(partner._id, partner.name)}
+                        className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 rounded-xl font-semibold flex items-center gap-1"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" /> Block
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })
             )}
           </div>
-        </div>
-      )}
+        ) : activeTab === 'pending' ? (
+          /* TAB 3: Pending Connection Requests */
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Incoming Requests ({incomingRequests.length})</h4>
+              {incomingRequests.length === 0 ? (
+                <p className="text-xs text-slate-500">No incoming connection requests.</p>
+              ) : (
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {incomingRequests.map((req) => (
+                    <div key={req._id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-800 dark:text-slate-200 overflow-hidden shrink-0">
+                          {req.requester?.avatar ? (
+                            <img src={req.requester.avatar} alt={req.requester.name} className="w-full h-full object-cover" />
+                          ) : (
+                            req.requester?.name?.charAt(0) || 'U'
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-slate-200">{req.requester?.name}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{req.requester?.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleRespondRequest(req._id, 'accept')}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold flex items-center gap-1 shadow-sm"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Accept
+                        </button>
+                        <button
+                          onClick={() => handleRespondRequest(req._id, 'reject')}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold flex items-center gap-1"
+                        >
+                          <X className="w-3.5 h-3.5" /> Decline
+                        </button>
+                        <button
+                          onClick={() => handleRespondRequest(req._id, 'block')}
+                          className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 rounded-xl font-semibold"
+                        >
+                          Block
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Outgoing Sent Requests ({outgoingRequests.length})</h4>
+              {outgoingRequests.length === 0 ? (
+                <p className="text-xs text-slate-500">No outgoing connection requests pending.</p>
+              ) : (
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {outgoingRequests.map((req) => (
+                    <div key={req._id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-800 dark:text-slate-200 overflow-hidden shrink-0">
+                          {req.recipient?.avatar ? (
+                            <img src={req.recipient.avatar} alt={req.recipient.name} className="w-full h-full object-cover" />
+                          ) : (
+                            req.recipient?.name?.charAt(0) || 'U'
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-slate-200">{req.recipient?.name}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{req.recipient?.email}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveConnection(req.recipient?._id, req.recipient?.name)}
+                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold flex items-center gap-1"
+                      >
+                        <X className="w-3.5 h-3.5" /> Withdraw Request
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : activeTab === 'blocked' ? (
+          /* TAB 4: Blocked Users Directory */
+          <div className="divide-y divide-slate-200 dark:divide-slate-800">
+            {blockedUsers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">No blocked users.</div>
+            ) : (
+              blockedUsers.map((bUser) => (
+                <div key={bUser._id} className="py-3.5 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-bold text-slate-800 dark:text-slate-200 overflow-hidden shrink-0">
+                      {bUser.avatar ? (
+                        <img src={bUser.avatar} alt={bUser.name} className="w-full h-full object-cover" />
+                      ) : (
+                        bUser.name?.charAt(0) || 'U'
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 dark:text-slate-200">{bUser.name}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">{bUser.email} &bull; {bUser.role}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleUnblockUser(bUser._id, bUser.name)}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1 shadow-sm"
+                  >
+                    <ShieldOff className="w-3.5 h-3.5" /> Unblock User
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        ) : activeTab === 'history' ? (
+          /* TAB 5: Connection Request Log */
+          <div className="divide-y divide-slate-200 dark:divide-slate-800">
+            {historyLog.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-500">No connection history logs found.</div>
+            ) : (
+              historyLog.map((log) => (
+                <div key={log._id} className="py-3 flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-slate-200">
+                      {log.requester?.name} &rarr; {log.recipient?.name}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {new Date(log.updatedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      log.status === 'accepted'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                        : log.status === 'rejected'
+                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        : log.status === 'blocked'
+                        ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                    }`}
+                  >
+                    {log.status}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

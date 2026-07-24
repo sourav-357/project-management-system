@@ -5,11 +5,15 @@ import { User } from '../models/user.js';
 
 // Auto-cleanup helper for rejected connection requests older than 10 days
 const cleanupExpiredRejections = async () => {
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-    await Connection.deleteMany({
-        status: 'rejected',
-        rejectedAt: { $lte: tenDaysAgo },
-    });
+    try {
+        const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        await Connection.deleteMany({
+            status: 'rejected',
+            rejectedAt: { $lte: tenDaysAgo },
+        });
+    } catch (e) {
+        console.error('Error cleaning expired rejections:', e);
+    }
 };
 
 // * 1. Explore Users for Connection
@@ -19,10 +23,15 @@ export const exploreUsers = asyncHandler(async (req, res, next) => {
     const currentUserId = req.user._id;
     const { role, search } = req.query;
 
-    const query = { _id: { $ne: currentUserId }, isDeleted: false, status: 'active' };
-    if (role && ['Student', 'Teacher', 'Admin'].includes(role)) {
-        query.role = role;
+    const query = {
+        _id: { $ne: currentUserId },
+        isDeleted: { $ne: true },
+    };
+
+    if (role && role !== 'All') {
+        query.role = { $regex: `^${role}$`, $options: 'i' };
     }
+
     if (search && search.trim()) {
         query.$or = [
             { name: { $regex: search.trim(), $options: 'i' } },
@@ -42,47 +51,47 @@ export const exploreUsers = asyncHandler(async (req, res, next) => {
 
     const connectionMap = new Map();
     connections.forEach((conn) => {
-        const otherId = conn.requester.toString() === currentUserId.toString()
-            ? conn.recipient.toString()
-            : conn.requester.toString();
-        connectionMap.set(otherId, conn);
+        if (conn && conn.requester && conn.recipient) {
+            const otherId = conn.requester.toString() === currentUserId.toString()
+                ? conn.recipient.toString()
+                : conn.requester.toString();
+            connectionMap.set(otherId, conn);
+        }
     });
 
     const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
 
-    const result = users
-        .map((u) => {
-            const conn = connectionMap.get(u._id.toString());
-            let connectionStatus = 'none';
-            let isRequester = false;
-            let cooldownDaysRemaining = 0;
-            let canRequest = true;
+    const result = users.map((u) => {
+        const conn = connectionMap.get(u._id.toString());
+        let connectionStatus = 'none';
+        let isRequester = false;
+        let cooldownDaysRemaining = 0;
+        let canRequest = true;
 
-            if (conn) {
-                connectionStatus = conn.status;
-                isRequester = conn.requester.toString() === currentUserId.toString();
+        if (conn) {
+            connectionStatus = conn.status;
+            isRequester = conn.requester.toString() === currentUserId.toString();
 
-                if (conn.status === 'rejected' && conn.rejectedAt) {
-                    const elapsed = Date.now() - new Date(conn.rejectedAt).getTime();
-                    if (elapsed < tenDaysMs) {
-                        cooldownDaysRemaining = Math.ceil((tenDaysMs - elapsed) / (24 * 60 * 60 * 1000));
-                        canRequest = false;
-                    }
-                } else if (conn.status === 'pending' || conn.status === 'accepted' || conn.status === 'blocked') {
+            if (conn.status === 'rejected' && conn.rejectedAt) {
+                const elapsed = Date.now() - new Date(conn.rejectedAt).getTime();
+                if (elapsed < tenDaysMs) {
+                    cooldownDaysRemaining = Math.ceil((tenDaysMs - elapsed) / (24 * 60 * 60 * 1000));
                     canRequest = false;
                 }
+            } else if (conn.status === 'pending' || conn.status === 'accepted' || conn.status === 'blocked') {
+                canRequest = false;
             }
+        }
 
-            return {
-                ...u,
-                connectionStatus,
-                isRequester,
-                canRequest,
-                cooldownDaysRemaining,
-                connectionId: conn ? conn._id : null,
-            };
-        })
-        .filter((u) => u.connectionStatus !== 'accepted' && u.connectionStatus !== 'pending' && u.connectionStatus !== 'blocked');
+        return {
+            ...u,
+            connectionStatus,
+            isRequester,
+            canRequest,
+            cooldownDaysRemaining,
+            connectionId: conn ? conn._id : null,
+        };
+    });
 
     res.status(200).json({
         success: true,
@@ -108,10 +117,9 @@ export const sendConnectionRequest = asyncHandler(async (req, res, next) => {
 
     const recipient = await User.findById(recipientId);
     if (!recipient || recipient.isDeleted) {
-        return next(new ErrorHandler('Target user not found', 404));
+        return next(new ErrorHandler('User not found', 404));
     }
 
-    // Check existing connection between these two users
     let conn = await Connection.findOne({
         $or: [
             { requester: requesterId, recipient: recipientId },
@@ -139,12 +147,11 @@ export const sendConnectionRequest = asyncHandler(async (req, res, next) => {
             if (elapsed < tenDaysMs) {
                 const daysRemaining = Math.ceil((tenDaysMs - elapsed) / (24 * 60 * 60 * 1000));
                 return next(new ErrorHandler(
-                    `Connection request was rejected. You can re-send a request after 10 days from rejection (${daysRemaining} day(s) remaining).`,
+                    `Connection request was rejected. You can re-send a request after 10 days (${daysRemaining} day(s) remaining).`,
                     400
                 ));
             }
 
-            // Cooldown period completed -> Update existing connection to pending
             conn.requester = requesterId;
             conn.recipient = recipientId;
             conn.status = 'pending';
@@ -170,7 +177,7 @@ export const sendConnectionRequest = asyncHandler(async (req, res, next) => {
 // * 3. Respond to Connection Request (Accept, Reject, Block)
 export const respondToRequest = asyncHandler(async (req, res, next) => {
     const { connectionId } = req.params;
-    const { action } = req.body; // 'accept', 'reject', 'block'
+    const { action } = req.body;
     const currentUserId = req.user._id;
 
     if (!['accept', 'reject', 'block'].includes(action)) {
@@ -229,7 +236,7 @@ export const getPendingRequests = asyncHandler(async (req, res, next) => {
     res.status(200).json({
         success: true,
         message: 'Pending connection requests fetched',
-        data: { incoming, outgoing },
+        data: { incoming, outgoing, requests: [...incoming, ...outgoing] },
     });
 });
 
@@ -278,11 +285,13 @@ export const getBlockedUsers = asyncHandler(async (req, res, next) => {
         .populate('recipient', 'name email role avatar department')
         .lean();
 
-    const blockedUsers = blocked.map((b) => {
-        return b.requester._id.toString() === currentUserId.toString()
-            ? b.recipient
-            : b.requester;
-    });
+    const blockedUsers = blocked
+        .filter(b => b.requester && b.recipient)
+        .map((b) => {
+            return b.requester._id.toString() === currentUserId.toString()
+                ? b.recipient
+                : b.requester;
+        });
 
     res.status(200).json({
         success: true,
@@ -311,7 +320,7 @@ export const unblockUser = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 8. Remove Connection (Allows re-blocking or re-connecting later)
+// * 8. Remove Connection
 export const removeConnection = asyncHandler(async (req, res, next) => {
     const { targetUserId } = req.params;
     const currentUserId = req.user._id;
@@ -360,35 +369,57 @@ export const blockUserDirectly = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 10. Get Active Connected Users
+// * 10. Get Active Connected Users (Includes peer connections + supervisor/student relationships)
 export const getMyConnections = asyncHandler(async (req, res, next) => {
     const currentUserId = req.user._id;
 
+    const currentUser = await User.findById(currentUserId).lean();
+    if (!currentUser) {
+        return next(new ErrorHandler('User profile not found', 404));
+    }
+
+    const connectedUserIdsSet = new Set();
+
+    // A) Accepted peer connections
     const connections = await Connection.find({
         status: 'accepted',
         $or: [{ requester: currentUserId }, { recipient: currentUserId }],
-    })
-        .populate('requester', 'name email role avatar department')
-        .populate('recipient', 'name email role avatar department')
-        .sort({ updatedAt: -1 })
-        .lean();
+    }).lean();
 
-    const connectedUsers = connections.map((conn) => {
-        const partner = conn.requester._id.toString() === currentUserId.toString()
-            ? conn.recipient
-            : conn.requester;
-
-        return {
-            ...partner,
-            connectionId: conn._id,
-            connectedAt: conn.updatedAt,
-        };
+    connections.forEach((conn) => {
+        if (conn && conn.requester && conn.recipient) {
+            const otherId = conn.requester.toString() === currentUserId.toString()
+                ? conn.recipient.toString()
+                : conn.requester.toString();
+            connectedUserIdsSet.add(otherId);
+        }
     });
+
+    // B) Academic Supervision Relationships: Student <-> Supervisor
+    if (currentUser.role === 'Student' && currentUser.supervisor) {
+        connectedUserIdsSet.add(currentUser.supervisor.toString());
+    }
+
+    if (currentUser.role === 'Teacher' && Array.isArray(currentUser.assignedStudents)) {
+        currentUser.assignedStudents.forEach((stId) => {
+            if (stId) connectedUserIdsSet.add(stId.toString());
+        });
+    }
+
+    const connectedUserIds = Array.from(connectedUserIdsSet);
+
+    const connectedUsers = await User.find({
+        _id: { $in: connectedUserIds }
+    })
+        .select('name email role avatar department')
+        .lean();
 
     res.status(200).json({
         success: true,
         message: 'Connected users fetched successfully',
-        data: { connections: connectedUsers },
+        data: {
+            connections: connectedUsers,
+            friends: connectedUsers,
+        },
     });
 });
-

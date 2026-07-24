@@ -5,21 +5,49 @@ import { Message } from '../models/message.js';
 import { User } from '../models/user.js';
 import { CallHistory } from '../models/callHistory.js';
 
-// * 1. Get Connected Friends List (Accepted Connections Only)
+// * 1. Get Connected Friends & Academic Collaborators List
 export const getConnectedFriends = asyncHandler(async (req, res, next) => {
     const currentUserId = req.user._id;
     const { role } = req.query;
 
+    const currentUser = await User.findById(currentUserId).lean();
+    if (!currentUser) {
+        return next(new ErrorHandler('User profile not found', 404));
+    }
+
+    const friendIdsSet = new Set();
+
+    // A) Peer connections with status: 'accepted'
     const connections = await Connection.find({
         status: 'accepted',
         $or: [{ requester: currentUserId }, { recipient: currentUserId }],
     }).lean();
 
-    const friendIds = connections.map((conn) => {
-        return conn.requester.toString() === currentUserId.toString()
-            ? conn.recipient
-            : conn.requester;
+    connections.forEach((conn) => {
+        const otherId = conn.requester.toString() === currentUserId.toString()
+            ? conn.recipient.toString()
+            : conn.requester.toString();
+        friendIdsSet.add(otherId);
     });
+
+    // B) Academic Supervision Relationships: Student <-> Supervisor
+    if (currentUser.role === 'Student' && currentUser.supervisor) {
+        friendIdsSet.add(currentUser.supervisor.toString());
+    }
+
+    if (currentUser.role === 'Teacher' && Array.isArray(currentUser.assignedStudents)) {
+        currentUser.assignedStudents.forEach((stId) => {
+            friendIdsSet.add(stId.toString());
+        });
+    }
+
+    // C) Admins can message any active user if no peer connections exist yet
+    if (currentUser.role === 'Admin') {
+        const allUsers = await User.find({ _id: { $ne: currentUserId }, isDeleted: false, status: 'active' }).select('_id').lean();
+        allUsers.forEach((u) => friendIdsSet.add(u._id.toString()));
+    }
+
+    const friendIds = Array.from(friendIdsSet);
 
     const userQuery = { _id: { $in: friendIds }, isDeleted: false, status: 'active' };
     if (role && ['Student', 'Teacher', 'Admin'].includes(role)) {
@@ -39,7 +67,7 @@ export const getConnectedFriends = asyncHandler(async (req, res, next) => {
                 isRead: false,
             });
 
-            const lastMessage = await Message.findOne({
+            const lastMessageDoc = await Message.findOne({
                 $or: [
                     { sender: currentUserId, recipient: friend._id },
                     { sender: friend._id, recipient: currentUserId },
@@ -52,15 +80,18 @@ export const getConnectedFriends = asyncHandler(async (req, res, next) => {
             return {
                 ...friend,
                 unreadCount,
-                lastMessage: lastMessage ? {
-                    content: lastMessage.content,
-                    createdAt: lastMessage.createdAt,
-                    isRead: lastMessage.isRead,
-                    isMine: lastMessage.sender.toString() === currentUserId.toString(),
-                } : null,
+                lastMessage: lastMessageDoc ? lastMessageDoc.content : null,
+                lastMessageDate: lastMessageDoc ? lastMessageDoc.createdAt : null,
             };
         })
     );
+
+    // Sort friends by most recent message date
+    friendsWithChatMeta.sort((a, b) => {
+        const dateA = a.lastMessageDate ? new Date(a.lastMessageDate).getTime() : 0;
+        const dateB = b.lastMessageDate ? new Date(b.lastMessageDate).getTime() : 0;
+        return dateB - dateA;
+    });
 
     res.status(200).json({
         success: true,
@@ -74,7 +105,7 @@ export const getConversationMessages = asyncHandler(async (req, res, next) => {
     const currentUserId = req.user._id;
     const { partnerId } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    const limit = parseInt(req.query.limit, 10) || 30;
     const skip = (page - 1) * limit;
 
     // Verify partner exists
@@ -138,7 +169,7 @@ export const reactToMessage = asyncHandler(async (req, res, next) => {
     const { emoji } = req.body;
     const currentUserId = req.user._id;
 
-    if (!['👍', '❤️', '😂', '😮', '😢', '🙏'].includes(emoji)) {
+    if (!['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '👏', '💯'].includes(emoji)) {
         return next(new ErrorHandler('Invalid emoji specified', 400));
     }
 
@@ -212,7 +243,22 @@ export const deleteCallHistoryRecord = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * 6. Clear Entire Conversation Messages (Keep Connection Intact)
+// * 6. Clear All Call History Logs
+export const clearAllCallHistory = asyncHandler(async (req, res, next) => {
+    const currentUserId = req.user._id;
+
+    await CallHistory.deleteMany({
+        callType: { $in: ['one_to_one_voice', 'one_to_one_video'] },
+        $or: [{ host: currentUserId }, { participants: currentUserId }],
+    });
+
+    res.status(200).json({
+        success: true,
+        message: 'All call history logs cleared successfully',
+    });
+});
+
+// * 7. Clear Entire Conversation Messages (Keep Connection Intact)
 export const clearChat = asyncHandler(async (req, res, next) => {
     const currentUserId = req.user._id;
     const { partnerId } = req.params;

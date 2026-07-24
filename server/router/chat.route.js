@@ -8,6 +8,7 @@ router.use(isAuthenticated);
 
 router.get('/friends', chatController.getConnectedFriends);
 router.get('/call-history', chatController.getCallHistory);
+router.delete('/call-history/clear-all', chatController.clearAllCallHistory);
 router.delete('/call-history/:historyId', chatController.deleteCallHistoryRecord);
 router.get('/messages/:partnerId', chatController.getConversationMessages);
 router.delete('/clear-chat/:partnerId', chatController.clearChat);

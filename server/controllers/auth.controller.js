@@ -9,7 +9,7 @@ import { generateTokenResponse } from '../utils/generateToken.js';
 import { sendEmail } from '../services/emailService.js';
 import { uploadToCloudinary } from '../config/cloudinary.js';
 
-// * Register User
+// * Register User (Self-registration sets status to 'pending' awaiting Admin approval)
 export const registerUser = asyncHandler(async (req, res, next) => {
     const { name, email, password, role, department } = req.body;
 
@@ -17,11 +17,10 @@ export const registerUser = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Please provide name, email, password, and role', 400));
     }
 
-    if (role === 'Student' || role === 'Teacher') {
-        return next(new ErrorHandler('Self-registration is disabled for Students and Teachers. Only an Administrator can create Student and Teacher accounts.', 403));
+    const allowedRoles = ['Student', 'Teacher', 'Admin'];
+    if (!allowedRoles.includes(role)) {
+        return next(new ErrorHandler('Invalid role specified', 400));
     }
-
-    const allowedRoles = ['Admin'];
 
     const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
     if (existingUser) {
@@ -33,18 +32,29 @@ export const registerUser = asyncHandler(async (req, res, next) => {
         email: email.toLowerCase().trim(),
         password,
         role,
-        department: department || '',
+        department: department || 'Computer Science',
+        status: 'pending',
     });
 
     user.password = undefined;
 
-    await generateTokenResponse(user, 201, 'User registered successfully', req, res);
+    res.status(201).json({
+        success: true,
+        message: 'Account registration submitted successfully! Your account is pending Admin approval before you can log in.',
+        data: {
+            user: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                status: user.status,
+            }
+        }
+    });
 });
 
 // * Login User
 export const login = asyncHandler(async (req, res, next) => {
-    console.log("LOGIN CONTROLLER ENTERED");
-    console.log(req.body);
     const { password, role } = req.body;
     const email = req.body.email;
 
@@ -62,8 +72,12 @@ export const login = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('This account has been deleted', 403));
     }
 
-    if (user.status === 'suspended') {
-        return next(new ErrorHandler('Your account has been suspended by an administrator', 403));
+    if (user.status === 'pending') {
+        return next(new ErrorHandler('Your account registration is pending Admin approval. You will be able to log in once an administrator approves your account.', 403));
+    }
+
+    if (user.status === 'suspended' || user.status === 'archived') {
+        return next(new ErrorHandler('Your account has been suspended or archived by an administrator', 403));
     }
 
     const isPasswordMatch = await user.comparePassword(password);

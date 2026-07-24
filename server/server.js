@@ -1,3 +1,9 @@
+process.env.DOTENVX_LOG_LEVEL = 'error';
+process.env.DOTENVX_QUIET = 'true';
+
+import dotenv from 'dotenv';
+dotenv.config({ quiet: true });
+
 import http from 'http';
 import { Server } from 'socket.io';
 import app from './app.js';
@@ -10,7 +16,7 @@ let httpServer;
 
 // ! handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception', err);
+    console.error('Uncaught Exception:', err);
     process.exit(1);
 });
 
@@ -20,13 +26,6 @@ const startServer = async () => {
         await connectDB(); // connect database
 
         httpServer = http.createServer(app);
-
-        const allowedSocketOrigins = [
-            (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
-            'http://localhost:5173',
-            'http://localhost:3000',
-            'http://localhost:5174'
-        ];
 
         const io = new Server(httpServer, {
             cors: {
@@ -55,8 +54,7 @@ startServer();
 
 // ! handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Rejection', err);
-
+    console.error('Unhandled Rejection:', err);
     if (httpServer) {
         httpServer.close(() => process.exit(1));
     } else {

@@ -7,11 +7,11 @@ Modern, responsive single-page frontend application powering the Academic FYP Go
 ## Technical Overview
 
 - **Framework**: React 19 built with Vite 8 for fast HMR.
-- **Styling**: Tailwind CSS 4 with custom dark/light theme tokens and modern glassmorphism UI elements.
+- **Styling**: Tailwind CSS 4 with custom dark slate theme tokens and modern UI elements.
 - **Icons**: Lucide React icon library.
 - **Routing**: React Router 7 with client-side role guards (`ProtectedRoute`).
 - **HTTP**: Axios instance with automated 401 interceptors for silent refresh token rotation.
-- **Real-Time**: Socket.io Client and WebRTC peer connection signaling.
+- **Real-Time**: App-wide Socket.io Client and WebRTC 1-on-1 P2P call signaling via `SocketContext`.
 
 ---
 
@@ -32,6 +32,5 @@ Modern, responsive single-page frontend application powering the Academic FYP Go
 | `UserManagement.jsx` | `/admin/users` | `Admin` | User directory table & account creator |
 | `ProjectManagement.jsx` | `/admin/projects` | `Admin` / `Teacher` | Global platform project board |
 | `Connections.jsx` | `/connections` | Authenticated | Peer network, explore directory & block list |
-| `MeetingsDashboard.jsx` | `/meetings` | Authenticated | Video meetings dashboard & instant room creator |
-| `GroupMeeting.jsx` | `/meetings/:meetingId` | Authenticated | WebRTC video conference room |
+| `InstantChat.jsx` | `/chat` | Authenticated | Real-time chat, unread badges & 1-on-1 WebRTC calls |
 | `ProfileSettings.jsx` | `/profile` | Authenticated | Avatar uploader, password change & session manager |

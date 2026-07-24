@@ -1,6 +1,6 @@
 # Server Socket.io & Real-Time Engine Handbook
 
-Technical specification for WebSocket event handlers, 1-on-1 direct chat messaging, WebRTC audio/video call signaling, and group video conference rooms in `server/sockets/`.
+Technical specification for WebSocket event handlers, 1-on-1 direct chat messaging, and WebRTC audio/video call signaling in `server/sockets/`.
 
 ---
 
@@ -37,7 +37,7 @@ Manages real-time messaging, read status propagation, and emoji reaction broadca
 
 #### `send_message`
 - **Direction**: Client → Server → Client
-- **Payload**: `{ recipientId, content, messageId }`
+- **Payload**: `{ recipientId, content, replyToId }`
 - **Logic**:
   1. Checks `userSocketMap` for `recipientId`.
   2. If online: emits `receive_message` payload directly to recipient's `socketId`.
@@ -46,62 +46,42 @@ Manages real-time messaging, read status propagation, and emoji reaction broadca
 
 #### `mark_read`
 - **Direction**: Client → Server → Client
-- **Payload**: `{ senderId, messageIds }`
+- **Payload**: `{ senderId }`
 - **Logic**:
   1. Updates matching Message documents in MongoDB to `isRead: true`.
   2. If message sender is online: emits `messages_read` event to sender's `socketId` to update unread badge UI.
 
 #### `toggle_reaction`
 - **Direction**: Client → Server → Client
-- **Payload**: `{ messageId, partnerId, emoji }`
+- **Payload**: `{ messageId, emoji }`
 - **Logic**:
   1. Updates reactions array in Message document.
   2. Emits `reaction_updated` event to partner's `socketId`.
 
 ---
 
-## 3. WebRTC Call & Video Meetings Socket (`server/sockets/callSocket.js`)
+## 3. WebRTC 1-on-1 Calling Socket (`server/sockets/callSocket.js`)
 
-Handles 1-on-1 WebRTC signaling and mesh group video conference rooms.
+Handles 1-on-1 WebRTC signaling for audio and video calls.
 
 ### 1-on-1 WebRTC Calling Events
 
 #### `initiate_call`
-- **Payload**: `{ recipientId, offerSignal, callType }`
-- **Logic**: Looks up recipient `socketId`. If online, emits `incoming_call` with caller details and offer signal. If offline or busy, returns `call_unavailable`.
+- **Payload**: `{ recipientId, offer, callType }`
+- **Logic**: Looks up recipient `socketId`. If online, emits `incoming_call` with caller details and offer signal across any active page.
 
 #### `answer_call`
-- **Payload**: `{ callerId, answerSignal }`
-- **Logic**: Emits `call_accepted` with answer signal to caller's `socketId`, establishing peer-to-peer WebRTC connection.
+- **Payload**: `{ callerId, answer }`
+- **Logic**: Emits `call_accepted` with answer signal to caller's `socketId`, establishing peer-to-peer WebRTC connection and logging in `CallHistory`.
 
 #### `ice_candidate`
-- **Payload**: `{ targetUserId, candidate }`
+- **Payload**: `{ targetId, candidate }`
 - **Logic**: Forwards WebRTC ICE candidate to target user's socket for NAT traversal.
 
+#### `reject_call`
+- **Payload**: `{ callerId }`
+- **Logic**: Logs declined/missed call record in `CallHistory` and sends system message to chat.
+
 #### `end_call`
-- **Payload**: `{ targetUserId, reason }`
+- **Payload**: `{ targetId }`
 - **Logic**: Emits `call_ended` signal to peer socket and logs call duration in `CallHistory`.
-
----
-
-### Group Video Conference Events
-
-#### `join_meeting_room`
-- **Payload**: `{ meetingId, user }`
-- **Logic**: Adds socket to Socket.io room channel `meeting_${meetingId}`. Emits `user_joined_room` to all other participants in the room.
-
-#### `sending_signal`
-- **Payload**: `{ userToSignal, callerId, signal }`
-- **Logic**: Forwards WebRTC offer signal to existing room participant for peer mesh connection.
-
-#### `receiving_signal`
-- **Payload**: `{ signal, callerId }`
-- **Logic**: Delivers WebRTC answer signal back to caller.
-
-#### `host_mute_user`
-- **Payload**: `{ meetingId, targetUserId, muteType }` (Host/Admin only)
-- **Logic**: Emits `host_muted_you` to target user's socket.
-
-#### `meeting_ended_by_host`
-- **Payload**: `{ meetingId }`
-- **Logic**: Broadcasts `meeting_closed` to all sockets in `meeting_${meetingId}` channel and closes room.

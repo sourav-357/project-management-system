@@ -1,35 +1,33 @@
-# Backend Server Infrastructure Manual & Architectural Rationale
+# Server Backend Architecture & System Design Manual
 
-A deep-dive technical engineering handbook for the backend server powering the Academic Final Year Project (FYP) Governance Platform.
+A comprehensive engineering handbook for the backend server powering the Academic Final Year Project (FYP) Governance Platform.
 
-The server operates as a unified HTTP and WebSockets process built on **Node.js, Express 5, MongoDB, Mongoose 9, Socket.io 4, and WebRTC**. It adheres to a strict four-tier architecture: **Route → Controller → Service → Model**.
+The server operates as a unified HTTP and WebSockets process built on **Node.js, Express 5, MongoDB, Mongoose 9, Socket.io 4, and WebRTC**. It adheres strictly to a four-tier architecture: **Route → Controller → Service → Model**.
 
 ---
 
 ## Table of Contents
 
-- [1. Server Architecture & Layer Isolation](#1-server-architecture--layer-isolation)
-- [2. Architectural Decisions & Engineering Rationale ("Why Behind Server Decisions")](#2-architectural-decisions--engineering-rationale-why-behind-server-decisions)
-  - [2.1 Why Express 5 over Express 4?](#21-why-express-5-over-express-4)
-  - [2.2 Why Four-Tier Layer Isolation (`Route -> Controller -> Service -> Model`)?](#22-why-four-tier-layer-isolation-route---controller---service---model)
-  - [2.3 Why Dual-JWT Session Security & In-Memory Token Handling?](#23-why-dual-jwt-session-security--in-memory-token-handling)
-  - [2.4 Why SHA-256 Token Hashing, Rotation & Reuse Detection?](#24-why-sha-256-token-hashing-rotation--reuse-detection)
-  - [2.5 Why Atomic MongoDB Operations (`$addToSet`, `findOneAndUpdate`) for Faculty Capacity?](#25-why-atomic-mongodb-operations-addtoset-findoneandupdate-for-faculty-capacity)
-  - [2.6 Why Partial Unique Compound Indexing for Project Lifecycle?](#26-why-partial-unique-compound-indexing-for-project-lifecycle)
-  - [2.7 Why Automated Supervision Unlinking on Project Completion?](#27-why-automated-supervision-unlinking-on-project-completion)
-  - [2.8 Why Single Process Express & Socket.io Integration?](#28-why-single-process-express--socketio-integration)
+- [1. Four-Tier Architecture & Layer Responsibilities](#1-four-tier-architecture--layer-responsibilities)
+- [2. System Design Rationale ("Why Behind Backend Choices")](#2-system-design-rationale-why-behind-backend-choices)
+  - [2.1 Why Express 5 Native Async Error Propagation?](#21-why-express-5-native-async-error-propagation)
+  - [2.2 Why Dual-JWT Session Architecture & In-Memory Access Tokens?](#22-why-dual-jwt-session-architecture--in-memory-access-tokens)
+  - [2.3 Why Cryptographic Refresh Token Hashing, Rotation & Reuse Detection?](#23-why-cryptographic-refresh-token-hashing-rotation--reuse-detection)
+  - [2.4 Why Atomic MongoDB Operations (`$expr`, `$addToSet`) for Faculty Capacity?](#24-why-atomic-mongodb-operations-expr-addtoset-for-faculty-capacity)
+  - [2.5 Why Partial Unique Compound Indexing for Single Active Proposals?](#25-why-partial-unique-compound-indexing-for-single-active-proposals)
+  - [2.6 Why Project Completion Unlinking & Capacity Recycling?](#26-why-project-completion-unlinking--capacity-recycling)
+  - [2.7 Why Single Process Express & Socket.io Integration?](#27-why-single-process-express--socketio-integration)
 - [3. Deep Dive: Entry Points (`server.js` & `app.js`)](#3-deep-dive-entry-points-serverjs--appjs)
 - [4. Deep Dive: Security Pipeline & Middlewares](#4-deep-dive-security-pipeline--middlewares)
 - [5. Deep Dive: Database Models & Index Strategies](#5-deep-dive-database-models--index-strategies)
 - [6. Deep Dive: Business Services & Atomic Operations](#6-deep-dive-business-services--atomic-operations)
-- [7. Deep Dive: Controllers & Complete API Endpoint Reference](#7-deep-dive-controllers--complete-api-endpoint-reference)
+- [7. Deep Dive: Controllers & REST API Directory](#7-deep-dive-controllers--rest-api-directory)
 - [8. Deep Dive: WebSockets & Real-Time Engine](#8-deep-dive-websockets--real-time-engine)
-- [9. Database Auto-Seeding System](#9-database-auto-seeding-system)
-- [10. Server Sub-Directory Index](#10-server-sub-directory-index)
+- [9. Auto-Seeding System](#9-auto-seeding-system)
 
 ---
 
-## 1. Server Architecture & Layer Isolation
+## 1. Four-Tier Architecture & Layer Responsibilities
 
 ```
                             ┌─────────────────────────────────────────┐
@@ -67,191 +65,99 @@ The server operates as a unified HTTP and WebSockets process built on **Node.js,
                             └─────────────────────────────────────────┘
 ```
 
----
-
-## 2. Architectural Decisions & Engineering Rationale ("Why Behind Server Decisions")
-
-### 2.1 Why Express 5 over Express 4?
-
-- **Native Promise Error Handling**: In Express 4, asynchronous errors inside async route handlers required explicit `try/catch` blocks or third-party wrappers to call `next(err)`. Express 5 natively handles rejected promises in middleware and route handlers, automatically passing errors to the centralized `errorMiddleware`.
-- **Improved Routing & Parameter Handling**: Express 5 offers updated URL route parsing and security fixes for query string processing.
+1. **Routes (`router/`)**: Route path definition and middleware chaining. No business logic.
+2. **Controllers (`controllers/`)**: Request parsing, validation parameter check, service invocation, and HTTP JSON response formatting.
+3. **Services (`services/`)**: Business logic, atomic concurrency operations, and data transformations. Reusable across REST and WebSockets.
+4. **Models (`models/`)**: Mongoose schema specifications, type validations, hooks, and index definitions.
 
 ---
 
-### 2.2 Why Four-Tier Layer Isolation (`Route -> Controller -> Service -> Model`)?
+## 2. System Design Rationale ("Why Behind Backend Choices")
 
-- **Decoupled Responsibilities**:
-  - **Routes (`router/`)**: Route definition and middleware chaining only.
-  - **Controllers (`controllers/`)**: HTTP parameter extraction, request validation, calling services, and formatting JSON responses. No direct database queries inside controllers.
-  - **Services (`services/`)**: Business logic, atomic concurrency operations, and data transformations. Reusable across REST endpoints and Socket event handlers.
-  - **Models (`models/`)**: Mongoose schema specifications, type validations, default values, pre-save hooks, and database indexing strategies.
-- **Maintainability & Testing**: Business logic isolated in `services/` can be unit tested independently without mocking Express `req`/`res` objects.
+### 2.1 Why Express 5 Native Async Error Propagation?
+- Express 5 automatically catches rejected promises in async middleware and route handlers, forwarding them directly to `errorMiddleware`. This eliminates third-party `try/catch` wrapper libraries.
 
----
+### 2.2 Why Dual-JWT Session Security & In-Memory Access Tokens?
+- Access Tokens (15m) are held in memory (`AuthContext`) to prevent XSS session theft from browser `localStorage`.
+- Refresh Tokens (7d) are stored in `httpOnly`, `SameSite=Strict` cookies to block CSRF attacks.
 
-### 2.3 Why Dual-JWT Session Security & In-Memory Token Handling?
+### 2.3 Why Cryptographic Refresh Token Hashing, Rotation & Reuse Detection?
+- Refresh token raw strings are never stored in MongoDB; only SHA-256 hashes are saved.
+- Token Rotation issues a new token pair on every refresh. Replaying a revoked token triggers **Automatic Reuse Detection**, invalidating all active user sessions instantly.
 
-- **Architectural Decision**: Authenticated sessions issue two tokens:
-  1. **Access Token**: Short-lived (15 minutes), kept in client memory.
-  2. **Refresh Token**: Long-lived (7 days), delivered in an `httpOnly`, `SameSite=Strict` cookie.
-- **Engineering Rationale**:
-  - **XSS Immunity**: Storing tokens in `localStorage` allows malicious scripts to steal sessions via Cross-Site Scripting (XSS). An `httpOnly` cookie cannot be read by browser scripts.
-  - **CSRF Protection**: `SameSite=Strict` guarantees the browser will never send the refresh cookie during cross-origin requests.
+### 2.4 Why Atomic MongoDB Operations for Faculty Capacity?
+- Using conditional updates (`$expr: { $lt: [{ $size: '$assignedStudents' }, '$maxStudents'] }`, `$addToSet`) inside MongoDB's write lock eliminates race conditions during simultaneous student supervision applications.
 
----
+### 2.5 Why Partial Unique Compound Indexing for Single Active Proposals?
+- Mongoose partial unique index on `{ student: 1 }` excluding `'completed'` and `'rejected'` statuses enforces that a student can only have one active project at a time while allowing completed project history.
 
-### 2.4 Why SHA-256 Token Hashing, Rotation & Reuse Detection?
+### 2.6 Why Project Completion Unlinking & Capacity Recycling?
+- Marking a project `'completed'` automatically clears active links (`supervisor: null`, `project: null`), pulls the student from the teacher's list (`$pull`), and releases faculty supervision capacity.
 
-- **Architectural Decision**:
-  - Raw refresh token strings are never stored in MongoDB; only SHA-256 cryptographic hashes are saved.
-  - Calling `/auth/refresh-token` revokes the old token hash and issues a new access/refresh token pair (Token Rotation).
-  - Presenting a revoked token hash triggers automatic **Reuse Detection**, revoking all active sessions for the user.
-- **Engineering Rationale**:
-  - If a database backup is leaked, attackers cannot generate valid refresh token strings.
-  - Token rotation limits token replay windows. Reuse detection neutralizes stolen token replay attacks instantly.
-
----
-
-### 2.5 Why Atomic MongoDB Operations (`$addToSet`, `findOneAndUpdate`) for Faculty Capacity?
-
-- **Architectural Decision**: Supervision applications are processed via atomic conditional updates:
-  ```javascript
-  const teacher = await User.findOneAndUpdate(
-    {
-      _id: teacherId,
-      role: 'Teacher',
-      $expr: { $lt: [{ $size: '$assignedStudents' }, '$maxStudents'] }
-    },
-    { $addToSet: { assignedStudents: studentId } },
-    { new: true }
-  );
-  ```
-- **Engineering Rationale**: A naive check-then-write pattern (`if (teacher.assignedStudents.length < limit) await update(...)`) suffers from race conditions when concurrent requests execute simultaneously. Atomic conditional writes execute inside MongoDB's write lock, guaranteeing that faculty capacity (`maxStudents`) is never exceeded.
-
----
-
-### 2.6 Why Partial Unique Compound Indexing for Project Lifecycle?
-
-- **Architectural Decision**: Enforced at the database engine level:
-  ```javascript
-  projectSchema.index(
-    { student: 1 },
-    { 
-      unique: true, 
-      partialFilterExpression: { 
-        isDeleted: false, 
-        status: { $nin: ['completed', 'rejected'] } 
-      } 
-    }
-  );
-  ```
-- **Engineering Rationale**: Guarantees that a student cannot create a second active proposal while one is ongoing. The `partialFilterExpression` excluding `'completed'` and `'rejected'` allows students to create new proposals after finishing a project.
-
----
-
-### 2.7 Why Automated Supervision Unlinking on Project Completion?
-
-- **Architectural Decision**: When a project is marked `'completed'`:
-  1. `project.status` transitions to `'completed'`.
-  2. Student `supervisor` and `project` references are set to `null`.
-  3. Student is pulled from teacher's `assignedStudents` list (`$pull`).
-  4. Project artifacts are locked read-only.
-- **Engineering Rationale**: Restores the student account to clean state for a new proposal while automatically releasing faculty supervision capacity.
-
----
-
-### 2.8 Why Single Process Express & Socket.io Integration?
-
-- **Architectural Decision**: Express and Socket.io share a single Node `http.Server` instance listening on port `3000`.
-- **Engineering Rationale**: Avoids cross-origin issues between REST and WebSockets, simplifies cookie propagation, and reduces container deployment complexity.
+### 2.7 Why Single Process Express & Socket.io Integration?
+- Shares a single HTTP server port, aligning CORS origins, cookie handshakes, and deployment configuration seamlessly.
 
 ---
 
 ## 3. Deep Dive: Entry Points (`server.js` & `app.js`)
 
-### `server.js` — Listener & Process Handlers
-- Connects to MongoDB (`connectDB()`).
-- Creates raw HTTP server wrapping Express `app`.
-- Attaches Socket.io engine with CORS security options.
-- Registers WebSocket event namespaces (`initializeChatSockets`, `initializeCallSockets`).
-- Registers process safety handlers:
-  - `uncaughtException`: Logs synchronous unhandled exceptions and exits immediately (`process.exit(1)`).
-  - `unhandledRejection`: Logs unhandled promise rejections and gracefully shuts down the HTTP server before process exit.
-
-### `app.js` — Security Pipeline & Routing Gateway
-- Configures security headers (`helmet`), NoSQL query sanitization (`express-mongo-sanitize`), gzip compression (`compression`), cookie parser (`cookie-parser`), and IP rate limiting (`express-rate-limit`).
-- Mounts modular routers under `/api/v1`.
-- Registers centralized error handling middleware (`errorMiddleware`).
+- `server.js`: Connects to MongoDB (`connectDB()`), wraps Express `app` in `http.Server`, binds Socket.io engine, registers socket event handlers, handles process signals (`uncaughtException`, `unhandledRejection`).
+- `app.js`: Configures security pipeline (`helmet`, `express-mongo-sanitize`, `compression`, `cookie-parser`, `express-rate-limit`), mounts `/api/v1` routes, registers `errorMiddleware`.
 
 ---
 
 ## 4. Deep Dive: Security Pipeline & Middlewares
 
-1. **`auth.js`**: `isAuthenticated` verifies access tokens from cookies or headers; `isAuthorized(...roles)` enforces RBAC.
-2. **`error.js`**: `ErrorHandler` class and `errorMiddleware` capture unhandled errors and format uniform JSON responses (`{ success: false, message }`).
-3. **`asyncHandler.js`**: Wrapper catching async exceptions in controllers.
+1. **`helmet`**: Sets HTTP security headers (`HSTS`, `X-Frame-Options`, `X-Content-Type-Options`).
+2. **`express-mongo-sanitize`**: Neutralizes NoSQL injection operators (`$gt`, `$where`).
+3. **`express-rate-limit`**: Enforces IP rate limiting (2,000 requests per 15 minutes).
+4. **`isAuthenticated`**: Verifies Access Tokens from cookies or headers.
+5. **`isAuthorized(...roles)`**: Restricts endpoints by user role.
+6. **`errorMiddleware`**: Centralized error formatter.
 
 ---
 
 ## 5. Deep Dive: Database Models & Index Strategies
 
-- **`User.js`**: Stores identity, bcrypt hashed passwords, roles (`Student`/`Teacher`/`Admin`), capacity, and references. Unique index on `email`.
-- **`Project.js`**: Governs proposals and deliverables. Partial unique index on `{ student: 1 }` for active proposals.
-- **`Connection.js`**: Peer network graph. Compound index `{ requester: 1, recipient: 1 }`.
-- **`Meeting.js`**: Video conference metadata. Index `{ host: 1, status: 1 }`.
+- **`User.js`**: User identity, bcrypt hashed passwords, role (`Student`/`Teacher`/`Admin`), capacity quotas. Index: `{ email: 1 }` (Unique).
+- **`Project.js`**: Proposals and deliverables. Partial unique index on `{ student: 1 }` for active proposals.
+- **`Connection.js`**: Peer network connections. Compound index `{ requester: 1, recipient: 1 }`.
 - **`Message.js`**: Direct chat messages. Compound index `{ sender: 1, recipient: 1, createdAt: -1 }`.
-- **`RefreshToken.js`**: Token rotation hashes. Index `{ tokenHash: 1 }` and TTL index `{ expiresAt: 1 }`.
+- **`CallHistory.js`**: 1-on-1 call logs. Index `{ host: 1, createdAt: -1 }`.
+- **`RefreshToken.js`**: SHA-256 token hashes. Unique index `{ tokenHash: 1 }`, TTL index `{ expiresAt: 1 }`.
 
 ---
 
-## 6. Deep Dive: Business Services & Atomic Operations
+## 6. Deep Dive: Business Services
 
-- **`teacherService.js`**: Handles atomic supervision requests (`acceptSupervisorRequest`) and project completion unlinking (`completeProjectService`).
-- **`projectService.js`**: Proposal submissions, draft edits, and project file attachments.
-- **`userService.js`**: Admin account provisioning, pagination, status toggling, and soft deletion.
-- **`fileService.js`**: Local file uploads and Cloudinary media processing.
+- `teacherService.js`: Atomic supervision requests and project completion unlinking.
+- `projectService.js`: Proposal submissions, draft edits, and deliverables file attachments.
+- `userService.js`: Admin user provisioning, directory pagination, and status toggling.
+- `fileService.js`: File uploads and Cloudinary media processing.
 
 ---
 
-## 7. Deep Dive: Controllers & Complete API Endpoint Reference
+## 7. REST API Endpoints (Base `/api/v1`)
 
-Full REST endpoint catalog mounted under `/api/v1`:
-- `/auth`: Login, refresh token rotation, logout, password change, avatar upload.
+- `/auth`: Login, refresh token rotation, profile, avatar, password change, logout.
 - `/admin`: Account creation, user directory, status toggle, proposal override, assign supervisor, stats.
-- `/student`: Fetch active project, submit proposal, fetch supervisors, request supervisor, upload files.
-- `/teacher`: Supervised proposals, review proposal, complete project, incoming requests, respond request, supervisees list, drop student.
-- `/connections`: Connections list, explore users, request connection, respond request, pending requests, blocked list, unblock user.
-- `/chat`: Friends list, conversation history, clear chat, emoji reactions.
-- `/meetings`: Invitees list, active meetings list, create meeting, join room, end meeting.
+- `/student`: Active project, submit proposal, fetch supervisors, request supervisor, upload files, stats.
+- `/teacher`: Proposals review, complete project, requests inbox, respond request, supervisees list, drop student.
+- `/connections`: Connections list, explore users, request connection, respond request, blocked list, unblock.
+- `/chat`: Friends list, conversation history, clear chat, emoji reactions, call history.
 
 ---
 
-## 8. Deep Dive: WebSockets & Real-Time Engine
+## 8. WebSockets & Real-Time Engine
 
-- **Direct Messaging (`chatSocket.js`)**: Real-time message delivery, read status propagation, and emoji reaction broadcasts.
-- **Video Calling & Meetings (`callSocket.js`)**: 1-on-1 WebRTC call signaling (`initiate_call`, `answer_call`, `ice_candidate`, `end_call`) and group video conference mesh rooms (`join_meeting_room`, `sending_signal`, `meeting_ended_by_host`).
-
----
-
-## 9. Database Auto-Seeding System
-
-Executed on every successful database connection (`server/config/seed.js`):
-- Seeds default `Admin` (`admin@university.edu` / `admin123456`) if zero admins exist.
-- Seeds default `Teacher` (`teacher@university.edu` / `teacher123456`) if zero teachers exist.
-- Seeds default `Student` (`student@university.edu` / `student123456`) if zero students exist.
+- **`chatSocket.js`**: Direct messaging, read status propagation (`isRead: true`), emoji reactions.
+- **`callSocket.js`**: 1-on-1 WebRTC call signaling (`initiate_call`, `answer_call`, `reject_call`, `ice_candidate`, `end_call`) triggering app-wide call popups and logging in `CallHistory`.
 
 ---
 
-## 10. Server Sub-Directory Index
+## 9. Auto-Seeding System
 
-| Directory | Documentation Link |
-|-----------|--------------------|
-| Configuration | [config/README.md](./config/README.md) |
-| Controllers | [controllers/README.md](./controllers/README.md) |
-| Middlewares | [middlewares/README.md](./middlewares/README.md) |
-| Models | [models/README.md](./models/README.md) |
-| Router | [router/README.md](./router/README.md) |
-| Services | [services/README.md](./services/README.md) |
-| Sockets | [sockets/README.md](./sockets/README.md) |
-| Utilities | [utils/README.md](./utils/README.md) |
-| Validations | [validations/README.md](./validations/README.md) |
+Seeds default accounts on MongoDB connection (`server/config/seed.js`) if role count is 0:
+- **Admin**: `admin@university.edu` / `admin123456`
+- **Teacher**: `teacher@university.edu` / `teacher123456`
+- **Student**: `student@university.edu` / `student123456`

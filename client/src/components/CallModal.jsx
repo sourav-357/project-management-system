@@ -19,7 +19,6 @@ export const CallModal = ({
   const isVideoCall = activeCall?.callType === 'one_to_one_video';
 
   useEffect(() => {
-    // 1. Listen for termination and signaling socket events at component mount level
     if (socket) {
       const handleRemoteCallEnded = () => {
         hangUp(false);
@@ -110,18 +109,6 @@ export const CallModal = ({
               console.error('Error adding ICE candidate:', err);
             }
           }
-        });
-      }
-
-      // If caller -> create offer and send to partner
-      if (activeCall?.mode === 'outgoing') {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        socket.emit('initiate_call', {
-          recipientId: activeCall.partner._id,
-          callType: activeCall.callType,
-          offer,
         });
       }
     } catch (err) {
@@ -233,7 +220,7 @@ export const CallModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md overflow-y-auto p-4 sm:p-6 flex flex-col justify-between min-h-screen">
+    <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md overflow-y-auto p-4 sm:p-6 flex flex-col justify-between min-h-screen text-white">
       {/* Top Header */}
       <div className="flex justify-between items-center text-white pb-3 border-b border-slate-800/80 shrink-0">
         <div className="flex items-center gap-3">

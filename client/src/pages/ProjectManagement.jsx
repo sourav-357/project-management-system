@@ -1,343 +1,313 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { 
-  FolderKanban, Check, X, UserCheck, AlertCircle, CheckCircle2, 
-  UserPlus, Search, Download, Filter, Lock, Sparkles, ShieldCheck 
-} from 'lucide-react';
+import { FolderKanban, Search, CheckCircle2, AlertCircle, UserCheck, File, Download, Check, X } from 'lucide-react';
 
 export const ProjectManagement = () => {
   const [projects, setProjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Search & Filter
-  const [searchTerm, setSearchTerm] = useState('');
+  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  
+  // Assign Supervisor Modal
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+  
+  // Admin Review Evaluation Modal
+  const [reviewProject, setReviewProject] = useState(null);
+  const [overrideStatus, setOverrideStatus] = useState('approved');
+  const [remarks, setRemarks] = useState('');
 
-  // Review Override modal state
-  const [reviewModalProj, setReviewModalProj] = useState(null);
-  const [reviewStatus, setReviewStatus] = useState('approved');
-  const [reviewRemarks, setReviewRemarks] = useState('');
-
-  // Assign Supervisor modal state
-  const [assignModalProj, setAssignModalProj] = useState(null);
-  const [selectedSupervisorId, setSelectedSupervisorId] = useState('');
-
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchProjectsData();
+  }, [statusFilter]);
 
-  const fetchData = async () => {
+  const fetchProjectsData = async () => {
     try {
       setLoading(true);
-      const [projRes, usersRes] = await Promise.all([
-        api.get('/admin/projects'),
-        api.get('/admin/getAllUsers?role=Teacher'),
+      const [projRes, teachRes] = await Promise.all([
+        api.get('/admin/projects', {
+          params: { status: statusFilter === 'All' ? undefined : statusFilter.toLowerCase() },
+        }),
+        api.get('/admin/getAllUsers', { params: { role: 'Teacher' } }),
       ]);
       setProjects(projRes.data.data.projects || []);
-      setTeachers(usersRes.data.data.users || []);
+      setTeachers(teachRes.data.data.users || []);
     } catch (err) {
-      console.error('Error fetching admin projects:', err);
+      console.error('Error fetching project board data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenReviewModal = (proj, status) => {
-    if (proj.status === 'completed') return;
-    setReviewModalProj(proj);
-    setReviewStatus(status);
-    setReviewRemarks(`Proposal ${status} by System Administrator`);
+  const handleAssignSupervisor = async (e) => {
+    e.preventDefault();
+    if (!selectedProject || !selectedTeacherId) return;
+
+    setActionMsg('');
+    setActionError('');
+    setSubmitting(true);
+
+    try {
+      const res = await api.post('/admin/assign-supervisor', {
+        projectId: selectedProject._id,
+        supervisorId: selectedTeacherId,
+      });
+      setActionMsg(res.data.message || 'Supervisor assigned successfully.');
+      setSelectedProject(null);
+      setSelectedTeacherId('');
+      fetchProjectsData();
+    } catch (err) {
+      setActionError(err.response?.data?.message || 'Failed to assign supervisor.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReviewAction = async (project, targetStatus) => {
+    setReviewProject(project);
+    setOverrideStatus(targetStatus);
+    setRemarks('');
   };
 
   const submitReviewOverride = async (e) => {
     e.preventDefault();
-    if (!reviewModalProj) return;
+    if (!reviewProject) return;
 
-    setMsg('');
-    setError('');
+    setActionMsg('');
+    setActionError('');
+    setSubmitting(true);
 
     try {
-      const res = await api.put(`/admin/projects/${reviewModalProj._id}/review`, {
-        status: reviewStatus,
-        remarks: reviewRemarks,
+      const res = await api.put(`/admin/projects/${reviewProject._id}/review`, {
+        status: overrideStatus,
+        remarks,
       });
-      setMsg(res.data.message);
-      setReviewModalProj(null);
-      fetchData();
+      setActionMsg(res.data.message || `Project proposal ${overrideStatus} successfully.`);
+      setReviewProject(null);
+      setRemarks('');
+      fetchProjectsData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update proposal status');
+      setActionError(err.response?.data?.message || 'Failed to update proposal status.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleOpenAssignModal = (proj) => {
-    if (proj.status === 'completed') return;
-    setAssignModalProj(proj);
-    setSelectedSupervisorId(proj.supervisor?._id || '');
-  };
-
-  const submitSupervisorAssignment = async (e) => {
-    e.preventDefault();
-    if (!assignModalProj || !selectedSupervisorId) return;
-
-    setMsg('');
-    setError('');
-
-    try {
-      const res = await api.post('/admin/assign-supervisor', {
-        projectId: assignModalProj._id,
-        supervisorId: selectedSupervisorId,
-      });
-      setMsg(res.data.message || 'Supervisor assigned successfully');
-      setAssignModalProj(null);
-      fetchData();
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to assign supervisor');
-    }
-  };
-
-  // CSV Export Engine
-  const exportProjectsToCSV = () => {
-    if (projects.length === 0) return;
-    const headers = ['Project Title,Student,Supervisor,Status,Created At'];
-    const rows = filteredProjects.map((p) =>
-      `"${p.title}","${p.student?.name || 'Unknown'}","${p.supervisor?.name || 'Unassigned'}","${p.status}","${new Date(p.createdAt).toLocaleDateString()}"`
-    );
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `projects_governance_report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-  // Filtered Projects List
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch =
-      p.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.student?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.supervisor?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
+  const filteredProjects = projects.filter((p) =>
+    p.title?.toLowerCase().includes(search.toLowerCase()) ||
+    p.student?.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   if (loading) {
     return (
-      <div className="p-12 flex flex-col items-center justify-center min-h-[450px]">
-        <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin"></div>
-        <p className="mt-4 text-xs font-semibold text-slate-500 dark:text-slate-400">Loading project records...</p>
+      <div className="p-12 flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden bg-slate-900 dark:bg-slate-950 rounded-3xl p-6 sm:p-8 text-white border border-slate-800 shadow-2xl">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-indigo-200 text-xs font-semibold backdrop-blur-md">
-              <FolderKanban className="w-3.5 h-3.5" /> Governance & Project Control
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Project Management</h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl leading-relaxed">
-              Global governance of student project proposals, faculty supervisor allocations, and historical completion records.
-            </p>
-          </div>
-
-          <button
-            onClick={exportProjectsToCSV}
-            className="px-5 py-3 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs rounded-2xl border border-white/20 flex items-center gap-2 transition-all shrink-0 self-start md:self-auto backdrop-blur-md"
-          >
-            <Download className="w-4 h-4 text-indigo-300" /> Export CSV Report
-          </button>
+    <div className="space-y-6 max-w-7xl mx-auto text-slate-900 dark:text-slate-100 transition-colors">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm">
+        <div>
+          <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Platform Governance</span>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Global Projects & Proposals Board</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Approve or reject proposals, assign supervisors, and inspect deliverables.</p>
         </div>
-      </div>
 
-      {msg && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2.5 shadow-sm animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <span className="font-medium">{msg}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2.5 shadow-sm animate-in fade-in">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
-          <span className="font-medium">{error}</span>
-        </div>
-      )}
-
-      {/* Search & Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="relative w-full sm:w-64">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by title, student name, or supervisor..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="Search project..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
-        </div>
-
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-            <Filter className="w-4 h-4" /> Filter Status:
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="All">All Statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="completed">Completed</option>
-          </select>
         </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="space-y-4">
-        {filteredProjects.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 p-12 rounded-3xl border border-slate-200 dark:border-slate-800 text-center text-slate-400 text-xs shadow-sm">
-            No projects match search criteria.
-          </div>
-        ) : (
-          filteredProjects.map((proj) => {
-            const isCompleted = proj.status === 'completed';
+      {actionMsg && (
+        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{actionMsg}</span>
+        </div>
+      )}
 
-            return (
-              <div 
-                key={proj._id} 
-                className={`bg-white dark:bg-slate-900 p-6 rounded-3xl border ${
-                  isCompleted
-                    ? 'border-emerald-200/80 dark:border-emerald-900/60 bg-emerald-50/20 dark:bg-emerald-950/10'
-                    : 'border-slate-200 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-800'
-                } shadow-sm transition-all duration-200 space-y-4`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{proj.title}</h3>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                      <span>Student: <strong className="text-slate-700 dark:text-slate-300">{proj.student?.name}</strong> ({proj.student?.email})</span>
-                      <span>&bull;</span>
-                      <span className="flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400">
-                        <UserCheck className="w-3.5 h-3.5" /> Supervisor: {proj.supervisor ? proj.supervisor.name : <span className="text-amber-600 font-normal">Unassigned</span>}
-                      </span>
+      {actionError && (
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{actionError}</span>
+        </div>
+      )}
+
+      {/* Projects Board */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 space-y-4 shadow-sm">
+        <div className="flex bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-semibold self-start inline-flex">
+          {['All', 'Pending', 'Approved', 'Assigned', 'Completed', 'Rejected'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`px-3 py-1 rounded-md transition-all ${
+                statusFilter === tab ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+          {filteredProjects.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500">No project proposals found matching filter.</div>
+          ) : (
+            filteredProjects.map((item) => {
+              const files = item.files || [];
+
+              // Status Toggle Button Logic:
+              // - Initial (submitted/pending): Show BOTH Approve and Reject
+              // - Approved / Assigned: Show ONLY Reject
+              // - Rejected: Show ONLY Approve
+              // - Completed: Locked (No buttons)
+              const showApproveBtn = item.status === 'submitted' || item.status === 'pending' || item.status === 'rejected';
+              const showRejectBtn = item.status === 'submitted' || item.status === 'pending' || item.status === 'approved' || item.status === 'assigned';
+
+              return (
+                <div key={item._id} className="py-4 space-y-3 text-xs">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1 max-w-2xl">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm">{item.title}</h4>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                          item.status === 'completed' || item.status === 'approved' || item.status === 'assigned'
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                            : item.status === 'rejected'
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-slate-600 dark:text-slate-400 line-clamp-2">{item.description}</p>
+                      <div className="flex gap-4 text-[10px] text-slate-500 pt-1">
+                        <span>Student: <strong className="text-slate-700 dark:text-slate-300">{item.student?.name}</strong> ({item.student?.email})</span>
+                        <span>Supervisor: <strong className="text-indigo-600 dark:text-indigo-400">{item.supervisor ? item.supervisor.name : 'Unassigned'}</strong></span>
+                      </div>
+                    </div>
+
+                    {/* Admin Action Controls */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {item.status !== 'completed' && (
+                        <>
+                          {showApproveBtn && (
+                            <button
+                              onClick={() => handleReviewAction(item, 'approved')}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-1 shadow-sm"
+                            >
+                              <Check className="w-3.5 h-3.5" /> Approve
+                            </button>
+                          )}
+                          {showRejectBtn && (
+                            <button
+                              onClick={() => handleReviewAction(item, 'rejected')}
+                              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-semibold flex items-center gap-1 shadow-sm"
+                            >
+                              <X className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          )}
+
+                          {(!item.supervisor || item.status === 'approved') && (
+                            <button
+                              onClick={() => setSelectedProject(item)}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center gap-1 shadow-sm"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" /> Assign Supervisor
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider self-start sm:self-auto ${
-                      proj.status === 'completed'
-                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
-                        : proj.status === 'approved' || proj.status === 'assigned'
-                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : proj.status === 'rejected'
-                        ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                    }`}
-                  >
-                    {isCompleted && <CheckCircle2 className="w-3.5 h-3.5" />}
-                    {isCompleted ? 'Completed' : proj.status}
-                  </span>
-                </div>
+                  {/* Project Deliverable Files */}
+                  {files.length > 0 && (
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <File className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Deliverables & Project Documents ({files.length})
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {files.map((file, fIdx) => {
+                          const fileUrl = file.fileUrl || file.url || file.path;
+                          const fileName = file.originalName || file.filename || file.name || `Document #${fIdx + 1}`;
 
-                <div className="p-4 bg-slate-50/80 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                  {proj.description}
-                </div>
-
-                {isCompleted ? (
-                  <div className="p-3.5 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/60 dark:border-emerald-900/40 text-xs text-slate-700 dark:text-slate-300 font-medium flex items-center justify-between">
-                    <span className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Completed Project Archive &bull; Immutable Read-Only Record</span>
-                    </span>
-                    <span className="text-[10px] font-extrabold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider px-3 py-1 bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-800 rounded-full">Finalized</span>
-                  </div>
-                ) : (
-                  /* Actions Bar */
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      onClick={() => handleOpenAssignModal(proj)}
-                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-2xl flex items-center gap-2 transition-all active:scale-95"
-                    >
-                      <UserPlus className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      {proj.supervisor ? 'Reassign Supervisor' : 'Assign Supervisor'}
-                    </button>
-
-                    {['submitted', 'pending', 'under_review', 'draft'].includes(proj.status) && (
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleOpenReviewModal(proj, 'rejected')}
-                          className="px-4 py-2 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-semibold text-xs rounded-2xl hover:bg-rose-100 flex items-center gap-1.5 transition-all"
-                        >
-                          <X className="w-4 h-4" /> Reject Override
-                        </button>
-                        <button
-                          onClick={() => handleOpenReviewModal(proj, 'approved')}
-                          className="px-4 py-2 bg-emerald-600 text-white font-semibold text-xs rounded-2xl hover:bg-emerald-700 shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all"
-                        >
-                          <Check className="w-4 h-4" /> Approve Override
-                        </button>
+                          return (
+                            <a
+                              key={file._id || fIdx}
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-sm transition-all"
+                              title={`Download ${fileName}`}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>{fileName}</span>
+                            </a>
+                          );
+                        })}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
-      {/* Review Override Modal */}
-      {reviewModalProj && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Admin Proposal Override ({reviewStatus.toUpperCase()})
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Project: {reviewModalProj.title}</p>
+      {/* Admin Assign Supervisor Modal */}
+      {selectedProject && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Assign Supervisor to: {selectedProject.title}</h3>
 
-            <form onSubmit={submitReviewOverride} className="space-y-4">
+            <form onSubmit={handleAssignSupervisor} className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Feedback & Override Remarks</label>
-                <textarea
+                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Select Faculty Member</label>
+                <select
                   required
-                  rows={3}
-                  value={reviewRemarks}
-                  onChange={(e) => setReviewRemarks(e.target.value)}
-                  placeholder="Provide explicit review feedback for student..."
-                  className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">-- Choose Supervisor --</option>
+                  {teachers.map((t) => (
+                    <option key={t._id} value={t._id}>
+                      {t.name} ({t.assignedStudents?.length || 0} / {t.maxStudents || 5} Capacity)
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-2">
+              <div className="flex gap-2 justify-end pt-2">
                 <button
                   type="button"
-                  onClick={() => setReviewModalProj(null)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-xs font-semibold rounded-2xl text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  onClick={() => setSelectedProject(null)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`px-5 py-2.5 text-white text-xs font-bold rounded-2xl shadow-md transition-all ${
-                    reviewStatus === 'approved' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
-                  }`}
+                  disabled={submitting || !selectedTeacherId}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold disabled:opacity-50"
                 >
-                  Confirm {reviewStatus}
+                  {submitting ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>
@@ -345,41 +315,42 @@ export const ProjectManagement = () => {
         </div>
       )}
 
-      {/* Assign Supervisor Modal */}
-      {assignModalProj && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4 border border-slate-200 dark:border-slate-800">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Assign Project Supervisor</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Project: {assignModalProj.title}</p>
+      {/* Admin Approve / Reject Proposal Modal */}
+      {reviewProject && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              {overrideStatus === 'approved' ? 'Approve Proposal' : 'Reject Proposal'}: {reviewProject.title}
+            </h3>
 
-            <form onSubmit={submitSupervisorAssignment} className="space-y-4">
+            <form onSubmit={submitReviewOverride} className="space-y-3 text-xs">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Select Faculty Supervisor</label>
-                <select
-                  required
-                  value={selectedSupervisorId}
-                  onChange={(e) => setSelectedSupervisorId(e.target.value)}
-                  className="w-full p-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">-- Choose Teacher --</option>
-                  {teachers.map((t) => (
-                    <option key={t._id} value={t._id}>
-                      {t.name} ({t.department || 'No Dept'}) - {t.email}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-slate-700 dark:text-slate-300 mb-1 font-semibold">Evaluation Remarks / Feedback</label>
+                <textarea
+                  rows={4}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder={`Add feedback for the student regarding this ${overrideStatus} proposal...`}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-2">
+              <div className="flex gap-2 justify-end pt-2">
                 <button
                   type="button"
-                  onClick={() => setAssignModalProj(null)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-xs font-semibold rounded-2xl text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  onClick={() => setReviewProject(null)}
+                  className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-semibold hover:bg-slate-300 dark:hover:bg-slate-700"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-md">
-                  Assign Supervisor
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`px-4 py-2 text-white rounded-lg font-semibold disabled:opacity-50 ${
+                    overrideStatus === 'approved' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                  }`}
+                >
+                  {submitting ? 'Processing...' : overrideStatus === 'approved' ? 'Confirm Approval' : 'Confirm Rejection'}
                 </button>
               </div>
             </form>

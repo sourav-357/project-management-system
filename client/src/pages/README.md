@@ -39,8 +39,8 @@ Global platform project board displaying all proposals, supervisor assignment mo
 ### 11. `Connections.jsx`
 Peer networking hub with tabs for My Connections, Explore Network, Pending Requests, and History/Blocked directory with direct message shortcuts.
 
-### 12. `MeetingsDashboard.jsx`
-Video conference dashboard displaying active calls and simple "Start Meeting" modal.
+### 12. `InstantChat.jsx`
+Direct 1-on-1 messaging workspace with live unread badges, smooth memory state updates, WebRTC audio/video call controls, and message reactions.
 
 ### 13. `ProfileSettings.jsx`
 User account card featuring avatar image uploader, password update form, and active session termination manager.

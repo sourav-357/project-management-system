@@ -5,16 +5,28 @@ import ErrorHandler from './error.js';
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    'image/jpeg', 'image/png', 'image/jpg', 'image/webp',
+  const allowedExactTypes = [
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/zip',
-    'application/x-zip-compressed'
+    'application/x-zip-compressed',
+    'application/x-rar-compressed',
+    'application/x-7z-compressed',
+    'application/octet-stream',
+    'application/json',
+    'application/xml'
   ];
 
-  if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('image/')) {
+  if (
+    allowedExactTypes.includes(file.mimetype) ||
+    file.mimetype.startsWith('image/') ||
+    file.mimetype.startsWith('text/')
+  ) {
     cb(null, true);
   } else {
     cb(new ErrorHandler(`Unsupported file format: ${file.mimetype}`, 400), false);

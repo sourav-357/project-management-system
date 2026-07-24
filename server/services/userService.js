@@ -9,12 +9,15 @@ import { User } from '../models/user.js';
 
 export const createUser = async (userData) => {
     try {
-        const user = new User(userData);
+        const user = new User({
+            ...userData,
+            status: userData.status || 'active',
+        });
         await user.save();
         user.password = userData.password;
         return user;
     } catch (error) {
-        throw new Error('Error creating user');
+        throw new Error('Error creating user: ' + error.message);
     }
 }
 

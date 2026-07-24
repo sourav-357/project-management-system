@@ -22,7 +22,8 @@ export const createStudent = asyncHandler(async (req, res, next) => {
         email: email.toLowerCase().trim(),
         password,
         department,
-        role: 'Student'
+        role: 'Student',
+        status: 'active'
     });
 
     res.status(201).json({
@@ -57,14 +58,14 @@ export const updateStudent = asyncHandler(async (req, res, next) => {
 // * Delete Student (Soft Delete)
 export const deleteStudent = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
-    const user = await User.findById(id);
+    const user = await User.findByIdAndUpdate(
+        id,
+        { isDeleted: true, status: 'archived' },
+        { new: true, runValidators: false }
+    );
     if (!user || user.role !== 'Student') {
         return next(new ErrorHandler('Student not found', 404));
     }
-
-    user.isDeleted = true;
-    user.status = 'archived';
-    await user.save();
 
     res.status(200).json({
         success: true,
@@ -91,6 +92,7 @@ export const createTeacher = asyncHandler(async (req, res, next) => {
         department,
         role: 'Teacher',
         maxStudents: maxStudents || 10,
+        status: 'active',
         expertise: Array.isArray(expertise)
             ? expertise
             : typeof expertise === 'string' && expertise.trim() !== ''
@@ -134,14 +136,14 @@ export const updateTeacher = asyncHandler(async (req, res, next) => {
 // * Delete Teacher (Soft Delete)
 export const deleteTeacher = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
-    const user = await User.findById(id);
+    const user = await User.findByIdAndUpdate(
+        id,
+        { isDeleted: true, status: 'archived' },
+        { new: true, runValidators: false }
+    );
     if (!user || user.role !== 'Teacher') {
         return next(new ErrorHandler('Teacher not found', 404));
     }
-
-    user.isDeleted = true;
-    user.status = 'archived';
-    await user.save();
 
     res.status(200).json({
         success: true,
@@ -149,26 +151,28 @@ export const deleteTeacher = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * Toggle User Status (Active / Suspended)
+// * Toggle User Status (Active / Pending / Suspended / Archived)
 export const toggleUserStatus = asyncHandler(async (req, res, next) => {
     const { id } = req.params;
-    const { status } = req.body; // 'active' or 'suspended'
+    const { status } = req.body;
 
-    if (!['active', 'suspended', 'archived'].includes(status)) {
+    if (!['active', 'pending', 'suspended', 'archived'].includes(status)) {
         return next(new ErrorHandler('Invalid status specified', 400));
     }
 
-    const user = await User.findById(id);
+    const user = await User.findByIdAndUpdate(
+        id,
+        { status },
+        { new: true, runValidators: false }
+    ).select('-password');
+
     if (!user) {
         return next(new ErrorHandler('User not found', 404));
     }
 
-    user.status = status;
-    await user.save();
-
     res.status(200).json({
         success: true,
-        message: `User status updated to ${status}`,
+        message: status === 'active' ? 'User account activated/approved successfully' : `User status updated to ${status}`,
         data: { user },
     });
 });
@@ -178,37 +182,35 @@ export const getAllUsers = asyncHandler(async (req, res, next) => {
     const { role, search, status, page = 1, limit = 50 } = req.query;
 
     const query = { isDeleted: false, role: { $ne: 'Admin' } };
-    if (role) query.role = role;
-    if (status) query.status = status;
+    if (role && ['Student', 'Teacher'].includes(role)) {
+        query.role = role;
+    }
+    if (status && ['active', 'pending', 'suspended', 'archived'].includes(status)) {
+        query.status = status;
+    }
     if (search) {
         query.$or = [
             { name: { $regex: search, $options: 'i' } },
             { email: { $regex: search, $options: 'i' } },
-            { department: { $regex: search, $options: 'i' } }
+            { department: { $regex: search, $options: 'i' } },
         ];
     }
 
     const users = await User.find(query)
         .select('-password -resetPasswordToken -resetPasswordExpire')
         .sort({ createdAt: -1 })
-        .limit(Number(limit))
-        .skip((Number(page) - 1) * Number(limit));
-
-    const total = await User.countDocuments(query);
+        .lean();
 
     res.status(200).json({
         success: true,
         message: 'Users fetched successfully',
-        data: { users, total, page: Number(page), pages: Math.ceil(total / limit) },
+        data: { users },
     });
 });
 
-// * Get All Projects
+// * Get All Projects for Admin Oversight
 export const getAllProjects = asyncHandler(async (req, res, next) => {
-    const projects = await Project.find({ isDeleted: false })
-        .populate('student', 'name email department avatar')
-        .populate('supervisor', 'name email department avatar')
-        .sort({ createdAt: -1 });
+    const { projects } = await projectService.getAllProjects();
 
     res.status(200).json({
         success: true,
@@ -217,93 +219,91 @@ export const getAllProjects = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * Admin Proposal Final Override Approval / Rejection
+// * Admin Review Proposal (Approve / Reject)
 export const reviewProposalAdmin = asyncHandler(async (req, res, next) => {
     const { projectId } = req.params;
-    const { status, remarks } = req.body; // 'approved' or 'rejected'
+    const { action } = req.body; // 'approved' or 'rejected'
+
+    if (!['approved', 'rejected'].includes(action)) {
+        return next(new ErrorHandler('Invalid action specified', 400));
+    }
 
     const project = await Project.findById(projectId);
     if (!project) {
         return next(new ErrorHandler('Project not found', 404));
     }
 
-    if (project.status === 'completed') {
-        return next(new ErrorHandler('Completed projects are locked into history and cannot be modified by anyone.', 403));
-    }
-
-    project.status = status;
-    if (remarks) {
-        project.feedback.push({
-            supervisorId: req.user._id,
-            type: status === 'approved' ? 'positive' : 'negative',
-            title: `Admin Proposal Review (${status.toUpperCase()})`,
-            message: remarks,
-        });
-    }
-
+    project.status = action;
     await project.save();
 
     res.status(200).json({
         success: true,
-        message: `Project proposal status set to ${status}`,
+        message: `Project proposal ${action} by Admin`,
         data: { project },
     });
 });
 
-// * Admin Assign Supervisor Manually
+// * Assign Supervisor to Student Project
 export const assignSupervisor = asyncHandler(async (req, res, next) => {
-    const { projectId, supervisorId } = req.body;
+    const { projectId, teacherId } = req.body;
+
+    if (!projectId || !teacherId) {
+        return next(new ErrorHandler('Project ID and Teacher ID are required', 400));
+    }
 
     const project = await Project.findById(projectId);
     if (!project) {
         return next(new ErrorHandler('Project not found', 404));
     }
 
-    if (project.status === 'completed') {
-        return next(new ErrorHandler('Completed projects are locked into history and cannot be re-assigned.', 403));
+    const teacher = await User.findById(teacherId);
+    if (!teacher || teacher.role !== 'Teacher' || teacher.isDeleted) {
+        return next(new ErrorHandler('Teacher not found or invalid role', 404));
     }
 
-    if (project.status !== 'approved' && project.status !== 'assigned') {
-        return next(new ErrorHandler('Supervisors can only be assigned to approved projects', 400));
+    const student = await User.findById(project.student);
+    if (!student) {
+        return next(new ErrorHandler('Student not found', 404));
     }
 
-    const supervisor = await User.findById(supervisorId);
-    if (!supervisor || supervisor.role !== 'Teacher') {
-        return next(new ErrorHandler('Invalid teacher selected', 400));
-    }
-
-    project.supervisor = supervisorId;
+    // Link supervisor to project and student
+    project.supervisor = teacherId;
+    project.status = 'assigned';
     await project.save();
 
-    await User.findByIdAndUpdate(project.student, { supervisor: supervisorId });
-    await User.findByIdAndUpdate(supervisorId, { $addToSet: { assignedStudents: project.student } });
+    student.supervisor = teacherId;
+    await student.save({ validateBeforeSave: false });
+
+    if (!teacher.assignedStudents.includes(student._id)) {
+        teacher.assignedStudents.push(student._id);
+        await teacher.save({ validateBeforeSave: false });
+    }
 
     res.status(200).json({
         success: true,
-        message: 'Supervisor assigned successfully',
+        message: `Supervisor ${teacher.name} assigned to project successfully`,
         data: { project },
     });
 });
 
-// * Get Admin System Dashboard Analytics
+// * Admin Dashboard High-Level Stats
 export const getAdminDashboardStats = asyncHandler(async (req, res, next) => {
-    const totalStudents = await User.countDocuments({ role: 'Student', isDeleted: false });
-    const totalTeachers = await User.countDocuments({ role: 'Teacher', isDeleted: false });
-    const totalProjects = await Project.countDocuments({ isDeleted: false });
-    const pendingProposals = await Project.countDocuments({ status: 'pending', isDeleted: false });
-    const approvedProjects = await Project.countDocuments({ status: 'approved', isDeleted: false });
+    const [totalStudents, totalTeachers, totalProjects, pendingProposals, activeSupervisions] = await Promise.all([
+        User.countDocuments({ role: 'Student', isDeleted: false }),
+        User.countDocuments({ role: 'Teacher', isDeleted: false }),
+        Project.countDocuments({ isDeleted: false }),
+        Project.countDocuments({ status: 'pending', isDeleted: false }),
+        Project.countDocuments({ status: { $in: ['assigned', 'approved'] }, isDeleted: false }),
+    ]);
 
     res.status(200).json({
         success: true,
-        message: 'Admin dashboard stats fetched successfully',
         data: {
-            metrics: {
-                totalStudents,
-                totalTeachers,
-                totalProjects,
-                pendingProposals,
-                approvedProjects,
-            },
+            totalStudents,
+            totalTeachers,
+            totalProjects,
+            pendingProposals,
+            activeSupervisions,
         },
     });
 });

@@ -26,6 +26,7 @@ export const getStudentProject = asyncHandler(async (req, res, next) => {
         data: {
             project: activeProject,
             projectsHistory: projects,
+            user: req.user,
         },
     });
 });
@@ -150,24 +151,30 @@ export const getSupervisor = asyncHandler(async (req, res, next) => {
     });
 });
 
-// * Get Pending Supervisor Request for Student
+// * Get Pending & Historical Supervisor Requests for Student
 export const getPendingSupervisorRequest = asyncHandler(async (req, res, next) => {
     const studentId = req.user._id;
 
-    const pendingRequest = await SupervisorRequest.findOne({ student: studentId, status: 'pending' })
+    const allRequests = await SupervisorRequest.find({ student: studentId })
+        .sort({ createdAt: -1 })
         .populate('supervisor', 'name email department avatar')
         .lean();
 
+    const pendingRequest = allRequests.find((r) => r.status === 'pending') || null;
+
     res.status(200).json({
         success: true,
-        message: 'Pending supervisor request fetched',
-        data: { pendingRequest: pendingRequest || null },
+        message: 'Supervisor requests fetched',
+        data: {
+            pendingRequest,
+            requestsHistory: allRequests,
+        },
     });
 });
 
 // * Request Supervisor (Concurrency Safe, Proposal Approval Guarded & Pending Check)
 export const requestSupervisor = asyncHandler(async (req, res, next) => {
-    const { teacherId, message } = req.body;
+    const { teacherId, message, notes } = req.body;
     const studentId = req.user._id;
 
     const freshStudent = await User.findById(studentId);
@@ -214,7 +221,7 @@ export const requestSupervisor = asyncHandler(async (req, res, next) => {
     const requestData = {
         student: studentId,
         supervisor: teacherId,
-        message: message || 'Requesting supervisor assignment for project',
+        message: message || notes || 'Requesting supervisor assignment for project',
     };
     const request = await requestService.createRequest(requestData);
 
