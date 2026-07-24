@@ -76,12 +76,7 @@ const allowedOrigins = [
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        const normalized = origin.replace(/\/$/, '');
-        if (allowedOrigins.includes(normalized) || normalized.endsWith('.vercel.app')) {
-            callback(null, true);
-        } else {
-            callback(null, true); // Fallback for dynamic deployments
-        }
+        return callback(null, origin);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,

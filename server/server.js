@@ -32,13 +32,9 @@ const startServer = async () => {
             cors: {
                 origin: (origin, callback) => {
                     if (!origin) return callback(null, true);
-                    const normalized = origin.replace(/\/$/, '');
-                    if (allowedSocketOrigins.includes(normalized) || normalized.endsWith('.vercel.app')) {
-                        callback(null, true);
-                    } else {
-                        callback(null, true);
-                    }
+                    return callback(null, origin);
                 },
+                methods: ["GET", "POST"],
                 credentials: true,
             },
         });
