@@ -7,13 +7,21 @@
  */
 export const getSocketUrl = () => {
   if (import.meta.env.VITE_SOCKET_URL) {
-    return import.meta.env.VITE_SOCKET_URL;
+    let socketEnv = import.meta.env.VITE_SOCKET_URL.trim();
+    if (!/^https?:\/\//i.test(socketEnv)) {
+      socketEnv = `https://${socketEnv}`;
+    }
+    return socketEnv.replace(/\/+$/, '');
   }
 
   const apiBase = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
   if (apiBase) {
+    let raw = apiBase.trim();
+    if (!/^https?:\/\//i.test(raw) && !raw.startsWith('/')) {
+      raw = `https://${raw}`;
+    }
     try {
-      const url = new URL(apiBase);
+      const url = new URL(raw);
       return url.origin;
     } catch (err) {
       console.warn('Invalid VITE_API_BASE_URL format for socket origin extraction:', apiBase);
