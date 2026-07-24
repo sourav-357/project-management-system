@@ -145,10 +145,17 @@ export const logout = asyncHandler(async (req, res, next) => {
         );
     }
 
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+    };
+
     res.status(200)
-        .clearCookie('refreshToken', { path: '/api/v1/auth/refresh-token' })
-        .clearCookie('accessToken')
-        .clearCookie('token')
+        .clearCookie('refreshToken', { ...cookieOptions, path: '/api/v1/auth/refresh-token' })
+        .clearCookie('accessToken', cookieOptions)
+        .clearCookie('token', cookieOptions)
         .json({
             success: true,
             message: 'Logged out successfully',
@@ -162,10 +169,17 @@ export const logoutAll = asyncHandler(async (req, res, next) => {
         { isRevoked: true, revokedAt: new Date() }
     );
 
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+    };
+
     res.status(200)
-        .clearCookie('refreshToken', { path: '/api/v1/auth/refresh-token' })
-        .clearCookie('accessToken')
-        .clearCookie('token')
+        .clearCookie('refreshToken', { ...cookieOptions, path: '/api/v1/auth/refresh-token' })
+        .clearCookie('accessToken', cookieOptions)
+        .clearCookie('token', cookieOptions)
         .json({
             success: true,
             message: 'Logged out from all active sessions successfully',
@@ -182,7 +196,8 @@ export const forgotPassword = asyncHandler(async (req, res, next) => {
     const resetToken = user.generateResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetPasswordUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const resetPasswordUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
     const message = generateForgotPasswordEmailTemplate(resetPasswordUrl);
 
     try {
@@ -269,7 +284,8 @@ export const updateAvatar = asyncHandler(async (req, res, next) => {
         return next(new ErrorHandler('Please upload an image file for profile avatar', 400));
     }
 
-    const uploadResult = await uploadToCloudinary(req.file.path, 'academic_platform/avatars');
+    const fileData = req.file.buffer || req.file.path;
+    const uploadResult = await uploadToCloudinary(fileData, 'academic_platform/avatars');
     const avatarUrl = uploadResult.secure_url || uploadResult.url;
 
     const user = await User.findByIdAndUpdate(

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../api/axios';
+import { getSocketUrl } from '../utils/socketUrl';
 import { useAuth } from '../context/AuthContext';
 import {
   MessageSquare, Send, CheckCheck, Check, Reply, Users, Filter, Search, ArrowUp, AlertCircle, X, Phone, Video, History, Trash2, Smile, PhoneMissed, CornerDownRight, UserX, UserMinus, Eraser, ArrowLeft
@@ -113,14 +114,14 @@ export const InstantChat = () => {
   // 1. Setup Socket.io client connection & active user tracking
   useEffect(() => {
     const token = getAccessToken();
-    const socketUrl = `${window.location.protocol}//${window.location.hostname}:3000`;
+    const socketUrl = getSocketUrl();
     const newSocket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
 
     newSocket.on('connect', () => {
-      console.log('Socket.io connected to server on port 3000');
+      console.log('Socket.io connected to server at:', socketUrl);
       newSocket.emit('get_online_users', (res) => {
         if (res && res.onlineUsers) {
           setOnlineUsers(new Set(res.onlineUsers));

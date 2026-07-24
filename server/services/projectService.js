@@ -35,7 +35,7 @@ export const addFilesToProject = async (projectId, files) => {
         }
 
         const uploadedFilePromises = files.map((file) =>
-            uploadProjectFile(file.path, file.originalname, file.mimetype, projectId)
+            uploadProjectFile(file.buffer || file.path, file.originalname, file.mimetype, projectId)
         );
 
         const fileMetadataArray = await Promise.all(uploadedFilePromises);

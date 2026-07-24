@@ -21,9 +21,24 @@ const startServer = async () => {
 
         httpServer = http.createServer(app);
 
+        const allowedSocketOrigins = [
+            (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://localhost:5174'
+        ];
+
         const io = new Server(httpServer, {
             cors: {
-                origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
+                origin: (origin, callback) => {
+                    if (!origin) return callback(null, true);
+                    const normalized = origin.replace(/\/$/, '');
+                    if (allowedSocketOrigins.includes(normalized) || normalized.endsWith('.vercel.app')) {
+                        callback(null, true);
+                    } else {
+                        callback(null, true);
+                    }
+                },
                 credentials: true,
             },
         });

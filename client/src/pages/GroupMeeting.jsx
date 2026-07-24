@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import api, { getAccessToken } from '../api/axios';
+import { getSocketUrl } from '../utils/socketUrl';
 import { useAuth } from '../context/AuthContext';
 import {
   Video, VideoOff, Mic, MicOff, MonitorUp, PhoneOff, MessageSquare, Pin, ShieldAlert, Send, Users, X
@@ -66,7 +67,8 @@ export const GroupMeeting = () => {
 
   const setupMeetingSocket = () => {
     const token = getAccessToken();
-    const newSocket = io('/', {
+    const socketUrl = getSocketUrl();
+    const newSocket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });

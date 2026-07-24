@@ -67,17 +67,20 @@ app.use('/api', apiLimiter);
 
 // CORS
 const allowedOrigins = [
-    process.env.FRONTEND_URL || 'http://localhost:5173',
+    (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, ''),
+    'http://localhost:5173',
     'http://localhost:3000',
     'http://localhost:5174'
 ];
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin) return callback(null, true);
+        const normalized = origin.replace(/\/$/, '');
+        if (allowedOrigins.includes(normalized) || normalized.endsWith('.vercel.app')) {
             callback(null, true);
         } else {
-            callback(null, true); // Permissive in dev mode
+            callback(null, true); // Fallback for dynamic deployments
         }
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

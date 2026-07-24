@@ -24,12 +24,14 @@ export const generateTokenResponse = async (user, statusCode, message, req, res)
     });
 
     const isProduction = process.env.NODE_ENV === 'production';
+    const sameSiteMode = isProduction ? 'none' : 'lax';
+    const secureMode = isProduction;
 
     // Set refresh token in httpOnly cookie
     res.cookie('refreshToken', rawRefreshToken, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
+        secure: secureMode,
+        sameSite: sameSiteMode,
         expires: expiresAt,
         path: '/api/v1/auth/refresh-token',
     });
@@ -37,8 +39,8 @@ export const generateTokenResponse = async (user, statusCode, message, req, res)
     // Also option to keep backwards compatible 'token' cookie if requested
     res.cookie('accessToken', accessToken, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'strict' : 'lax',
+        secure: secureMode,
+        sameSite: sameSiteMode,
         expires: new Date(Date.now() + 15 * 60 * 1000), // 15 mins
     });
 
