@@ -20,6 +20,7 @@ process.on('uncaughtException', (err) => {
     process.exit(1);
 });
 
+
 // * start server
 const startServer = async () => {
     try {
