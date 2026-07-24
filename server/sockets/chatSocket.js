@@ -1,82 +1,56 @@
-import jwt from 'jsonwebtoken';
+import { Message } from '../models/message.js';
 import { User } from '../models/user.js';
 import { Connection } from '../models/connection.js';
-import { Message } from '../models/message.js';
-
-const onlineUserSockets = new Map();
 
 export const initializeChatSockets = (io) => {
-    // Middleware for Socket.io JWT authentication
-    io.use(async (socket, next) => {
-        try {
-            const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
-            if (!token) {
-                return next(new Error('Authentication token required'));
-            }
-
-            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretjwtkey');
-            const user = await User.findById(decoded.id).select('_id name role email');
-            if (!user) {
-                return next(new Error('User not found'));
-            }
-
-            socket.user = user;
-            next();
-        } catch (err) {
-            next(new Error('Authentication failed'));
-        }
-    });
-
     io.on('connection', (socket) => {
+        if (!socket.user) return;
         const userId = socket.user._id.toString();
+
+        // Join personal user room for direct messaging & notifications
         socket.join(userId);
 
-        // Track active online user sockets
-        let userSockets = onlineUserSockets.get(userId) || new Set();
-        userSockets.add(socket.id);
-        onlineUserSockets.set(userId, userSockets);
+        // Notify user status online to active connections
+        socket.broadcast.emit('user_online', { userId });
 
-        // Broadcast online status to all sockets
-        io.emit('user_online', { userId });
-
-        // Handler: Fetch current list of online user IDs
-        socket.on('get_online_users', (callback) => {
-            const onlineUserIds = Array.from(onlineUserSockets.keys());
-            if (typeof callback === 'function') {
-                callback({ success: true, onlineUsers: onlineUserIds });
-            } else {
-                socket.emit('online_users_list', onlineUserIds);
-            }
-        });
-
-        // Handler: Send Message
+        // Handler: Send Message in 1-on-1 Chat
         socket.on('send_message', async (data, callback) => {
             try {
-                const { recipientId, content, replyToId } = data;
-                if (!recipientId || !content || !content.trim()) {
-                    if (callback) callback({ success: false, error: 'Recipient and message content required' });
+                const { recipientId, content, mediaUrl, fileUrl, mediaType, fileName, fileSize } = data;
+
+                if (!recipientId || (!content && !mediaUrl && !fileUrl)) {
+                    if (callback) callback({ success: false, error: 'Recipient and content or media required' });
                     return;
                 }
 
-                const recipientUser = await User.findById(recipientId);
-                if (!recipientUser || recipientUser.isDeleted) {
-                    if (callback) callback({ success: false, error: 'Recipient user not found' });
+                // Check connection status or block status
+                const isBlocked = await Connection.findOne({
+                    status: 'blocked',
+                    $or: [
+                        { requester: userId, recipient: recipientId },
+                        { requester: recipientId, recipient: userId },
+                    ],
+                });
+
+                if (isBlocked) {
+                    if (callback) callback({ success: false, error: 'Cannot send message to this user' });
                     return;
                 }
 
                 const message = await Message.create({
                     sender: userId,
                     recipient: recipientId,
-                    content: content.trim(),
-                    replyTo: replyToId || null,
+                    content: content || '',
+                    mediaUrl: mediaUrl || fileUrl || '',
+                    mediaType: mediaType || 'none',
+                    fileName: fileName || '',
+                    fileSize: fileSize || '',
+                    isRead: false,
                 });
 
                 const populatedMessage = await Message.findById(message._id)
-                    .populate({
-                        path: 'replyTo',
-                        select: 'content sender',
-                        populate: { path: 'sender', select: 'name' },
-                    })
+                    .populate('sender', 'name avatar role department')
+                    .populate('recipient', 'name avatar role department')
                     .populate('reactions.user', 'name')
                     .lean();
 
@@ -91,56 +65,6 @@ export const initializeChatSockets = (io) => {
             }
         });
 
-        // WebRTC Call Signaling Handlers & Real-Time Chat Call Record Injection
-        socket.on('initiate_call', (data) => {
-            const { recipientId, callType, offer } = data;
-            io.to(recipientId).emit('incoming_call', {
-                caller: { _id: userId, name: socket.user.name, role: socket.user.role },
-                callType: callType || 'one_to_one_voice',
-                offer,
-            });
-        });
-
-        socket.on('answer_call', async (data) => {
-            const { callerId, answer, callType } = data;
-            io.to(callerId).emit('call_accepted', { answer });
-
-            // Automatically insert call record into chat stream when call is answered!
-            try {
-                const callText = callType === 'one_to_one_video' ? '📹 Video Call (Answered)' : '📞 Voice Call (Answered)';
-                const message = await Message.create({
-                    sender: userId,
-                    recipient: callerId,
-                    content: callText,
-                    isRead: true,
-                });
-
-                const populatedMessage = await Message.findById(message._id)
-                    .populate('reactions.user', 'name')
-                    .lean();
-
-                io.to(callerId).emit('receive_message', populatedMessage);
-                io.to(userId).emit('receive_message', populatedMessage);
-            } catch (err) {
-                console.error('Error logging call record to chat:', err);
-            }
-        });
-
-        socket.on('reject_call', (data) => {
-            const { callerId } = data;
-            io.to(callerId).emit('call_rejected');
-        });
-
-        socket.on('end_call', (data) => {
-            const { targetId } = data;
-            io.to(targetId).emit('call_ended');
-        });
-
-        socket.on('ice_candidate', (data) => {
-            const { targetId, candidate } = data;
-            io.to(targetId).emit('ice_candidate', { candidate });
-        });
-
         // Handler: Mark Messages as Read
         socket.on('mark_read', async (data) => {
             try {
@@ -149,67 +73,64 @@ export const initializeChatSockets = (io) => {
 
                 await Message.updateMany(
                     { sender: senderId, recipient: userId, isRead: false },
-                    { isRead: true, readAt: new Date() }
+                    { $set: { isRead: true } }
                 );
 
-                // Notify original sender that their messages were read
-                io.to(senderId).emit('messages_read', { readerId: userId });
+                io.to(senderId).emit('messages_read_by_recipient', { recipientId: userId });
             } catch (err) {
                 console.error('Socket mark_read error:', err);
             }
         });
 
-        // Handler: Toggle Reaction
+        // Handler: Toggle Message Reaction
         socket.on('toggle_reaction', async (data) => {
             try {
                 const { messageId, emoji } = data;
-                if (!messageId || !emoji) return;
-
                 const message = await Message.findById(messageId);
                 if (!message) return;
 
                 const existingIndex = message.reactions.findIndex(
-                    (r) => r.user.toString() === userId
+                    (r) => r.user.toString() === userId && r.emoji === emoji
                 );
 
                 if (existingIndex > -1) {
-                    if (message.reactions[existingIndex].emoji === emoji) {
-                        message.reactions.splice(existingIndex, 1);
-                    } else {
-                        message.reactions[existingIndex].emoji = emoji;
-                    }
+                    message.reactions.splice(existingIndex, 1);
                 } else {
                     message.reactions.push({ user: userId, emoji });
                 }
 
                 await message.save();
-                const populatedMessage = await Message.findById(message._id)
+
+                const updated = await Message.findById(messageId)
+                    .populate('sender', 'name avatar role department')
+                    .populate('recipient', 'name avatar role department')
                     .populate('reactions.user', 'name')
                     .lean();
 
-                // Emit reaction update to both users
-                io.to(message.sender.toString()).emit('reaction_updated', {
-                    messageId: message._id,
-                    reactions: populatedMessage.reactions,
-                });
-                io.to(message.recipient.toString()).emit('reaction_updated', {
-                    messageId: message._id,
-                    reactions: populatedMessage.reactions,
-                });
+                const otherUser = message.sender.toString() === userId ? message.recipient.toString() : message.sender.toString();
+                io.to(otherUser).emit('message_reaction_updated', updated);
+                io.to(userId).emit('message_reaction_updated', updated);
             } catch (err) {
                 console.error('Socket toggle_reaction error:', err);
             }
         });
 
-        socket.on('disconnect', () => {
-            let activeSockets = onlineUserSockets.get(userId);
-            if (activeSockets) {
-                activeSockets.delete(socket.id);
-                if (activeSockets.size === 0) {
-                    onlineUserSockets.delete(userId);
-                    io.emit('user_offline', { userId });
-                }
+        // Handler: Typing Indicator
+        socket.on('typing_start', ({ recipientId }) => {
+            if (recipientId) {
+                io.to(recipientId).emit('user_typing', { userId });
             }
+        });
+
+        socket.on('typing_stop', ({ recipientId }) => {
+            if (recipientId) {
+                io.to(recipientId).emit('user_stop_typing', { userId });
+            }
+        });
+
+        // Handler: Disconnect
+        socket.on('disconnect', () => {
+            socket.broadcast.emit('user_offline', { userId });
         });
     });
 };

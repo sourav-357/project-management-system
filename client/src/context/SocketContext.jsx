@@ -1,62 +1,28 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { useAuth } from './AuthContext';
-import { getAccessToken } from '../api/axios';
-import { getSocketUrl } from '../utils/socketUrl';
 
 const SocketContext = createContext(null);
 
-export const SocketProvider = ({ children }) => {
-  const { user } = useAuth();
+export const SocketProvider = ({ children, user }) => {
   const [socket, setSocket] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  
-  // Unread messages counts map: friendId -> count
   const [unreadCounts, setUnreadCounts] = useState({});
   const [activeChatUserId, setActiveChatUserId] = useState(null);
-
-  // Global Call States for App-Wide Popups
   const [incomingCall, setIncomingCall] = useState(null); // { caller, callType, offer }
-  const [activeCall, setActiveCall] = useState(null); // { partner, callType, offer, answer, isCaller }
-
+  const [activeCall, setActiveCall] = useState(null); // { partner, callType, offer, answer, isCaller, isConnected, mode }
   const socketRef = useRef(null);
 
-  // 1. Establish App-Wide Socket Connection when User is Logged In
   useEffect(() => {
-    if (!user) {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        setSocket(null);
-      }
-      setOnlineUsers(new Set());
-      setIncomingCall(null);
-      setActiveCall(null);
-      return;
-    }
+    if (!user?._id) return;
 
-    const token = getAccessToken();
-    const socketUrl = getSocketUrl();
-    if (!socketUrl) return;
-
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
     const newSocket = io(socketUrl, {
-      auth: { token },
-      transports: ['polling', 'websocket'],
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
     });
 
     socketRef.current = newSocket;
     setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('App-Wide Socket connected for user:', user.name);
-
-      // Request online users list
-      newSocket.emit('get_online_users', (res) => {
-        if (res && res.onlineUsers) {
-          setOnlineUsers(new Set(res.onlineUsers));
-        }
-      });
-    });
 
     // Online Status Listeners
     newSocket.on('user_online', ({ userId }) => {
@@ -71,19 +37,17 @@ export const SocketProvider = ({ children }) => {
       });
     });
 
-    // Incoming Call Popup Signal (Triggered on ANY page)
+    // Incoming Call Popup Signal
     newSocket.on('incoming_call', (data) => {
-      console.log('Incoming call received:', data);
       setIncomingCall(data);
     });
 
-    // 1-on-1 Call Signals
+    // 1-on-1 Call Signals (Clean silent state resets to prevent alert loops)
     newSocket.on('call_accepted', (data) => {
       setActiveCall((prev) => (prev ? { ...prev, answer: data.answer, isConnected: true } : null));
     });
 
     newSocket.on('call_rejected', () => {
-      alert('Call was declined or unanswered.');
       setActiveCall(null);
       setIncomingCall(null);
     });
@@ -131,6 +95,7 @@ export const SocketProvider = ({ children }) => {
       offer,
       isCaller: true,
       isConnected: false,
+      mode: 'outgoing',
     });
     socketRef.current.emit('initiate_call', {
       recipientId: recipient._id,
@@ -139,8 +104,8 @@ export const SocketProvider = ({ children }) => {
     });
   };
 
-  const acceptCall = (answer) => {
-    if (!socketRef.current || !incomingCall) return;
+  const acceptCall = () => {
+    if (!incomingCall) return;
     const partner = incomingCall.caller;
     const callType = incomingCall.callType;
     const offer = incomingCall.offer;
@@ -149,14 +114,9 @@ export const SocketProvider = ({ children }) => {
       partner,
       callType,
       offer,
-      answer,
       isCaller: false,
       isConnected: true,
-    });
-
-    socketRef.current.emit('answer_call', {
-      callerId: partner._id,
-      answer,
+      mode: 'incoming',
     });
 
     setIncomingCall(null);

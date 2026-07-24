@@ -19,37 +19,36 @@ export const CallModal = ({
   const isVideoCall = activeCall?.callType === 'one_to_one_video';
 
   useEffect(() => {
+    let isSubscribed = true;
+
+    const handleRemoteCallEnded = () => {
+      if (isSubscribed) hangUp(false);
+    };
+
+    const handleRemoteCallRejected = () => {
+      if (isSubscribed) hangUp(false);
+    };
+
     if (socket) {
-      const handleRemoteCallEnded = () => {
-        hangUp(false);
-      };
-
-      const handleRemoteCallRejected = () => {
-        alert('Call was declined');
-        hangUp(false);
-      };
-
       socket.on('call_ended', handleRemoteCallEnded);
       socket.on('call_rejected', handleRemoteCallRejected);
+    }
 
-      setupWebRTC();
+    setupWebRTC();
 
-      return () => {
+    return () => {
+      isSubscribed = false;
+      if (socket) {
         socket.off('call_ended', handleRemoteCallEnded);
         socket.off('call_rejected', handleRemoteCallRejected);
-        cleanupCall();
-      };
-    } else {
-      setupWebRTC();
-      return () => {
-        cleanupCall();
-      };
-    }
+      }
+      cleanupCall();
+    };
   }, []);
 
   const setupWebRTC = async () => {
     try {
-      // 1. Get user media (mic & camera)
+      // 1. Get user local audio & video stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: isVideoCall,
@@ -60,29 +59,30 @@ export const CallModal = ({
         localVideoRef.current.srcObject = stream;
       }
 
-      // 2. Initialize RTCPeerConnection
+      // 2. Create RTCPeerConnection
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
         ],
       });
 
       peerConnectionRef.current = pc;
 
-      // Add local tracks to peer connection
+      // Add local stream tracks to WebRTC peer connection
       stream.getTracks().forEach((track) => {
         pc.addTrack(track, stream);
       });
 
-      // Remote stream track handler
+      // Remote stream track listener
       pc.ontrack = (event) => {
         if (remoteVideoRef.current && event.streams[0]) {
           remoteVideoRef.current.srcObject = event.streams[0];
         }
       };
 
-      // ICE candidate handler
+      // ICE Candidate listener
       pc.onicecandidate = (event) => {
         if (event.candidate && socket && activeCall?.partner?._id) {
           socket.emit('ice_candidate', {
@@ -92,12 +92,16 @@ export const CallModal = ({
         }
       };
 
-      // Socket signal listeners for connection & candidates
+      // Socket signal listeners
       if (socket) {
         socket.on('call_accepted', async ({ answer }) => {
-          if (pc.signalingState !== 'stable') {
-            await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            setCallState('connected');
+          try {
+            if (pc && pc.signalingState !== 'stable' && answer) {
+              await pc.setRemoteDescription(new RTCSessionDescription(answer));
+              setCallState('connected');
+            }
+          } catch (err) {
+            console.error('Error applying remote answer:', err);
           }
         });
 
@@ -111,9 +115,34 @@ export const CallModal = ({
           }
         });
       }
+
+      // 3. Handle WebRTC Offer / Answer negotiation
+      if (activeCall?.mode === 'outgoing') {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        if (socket && activeCall?.partner?._id) {
+          socket.emit('initiate_call', {
+            recipientId: activeCall.partner._id,
+            callType: activeCall.callType,
+            offer,
+          });
+        }
+      } else if (activeCall?.offer && activeCall?.mode === 'incoming') {
+        await pc.setRemoteDescription(new RTCSessionDescription(activeCall.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        if (socket && activeCall?.partner?._id) {
+          socket.emit('answer_call', {
+            callerId: activeCall.partner._id,
+            answer,
+            callType: activeCall.callType,
+          });
+        }
+        setCallState('connected');
+      }
     } catch (err) {
       console.error('Error setting up WebRTC call:', err);
-      alert('Unable to access microphone or camera for call');
+      cleanupCall();
       onCloseCall();
     }
   };
@@ -121,19 +150,22 @@ export const CallModal = ({
   const handleAcceptCall = async () => {
     try {
       const pc = peerConnectionRef.current;
-      if (!pc || !activeCall?.offer) return;
+      if (pc && activeCall?.offer) {
+        if (pc.signalingState !== 'stable') {
+          await pc.setRemoteDescription(new RTCSessionDescription(activeCall.offer));
+        }
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-      await pc.setRemoteDescription(new RTCSessionDescription(activeCall.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit('answer_call', {
-        callerId: activeCall.partner._id,
-        answer,
-        callType: activeCall.callType,
-      });
-
-      setCallState('connected');
+        if (socket && activeCall?.partner?._id) {
+          socket.emit('answer_call', {
+            callerId: activeCall.partner._id,
+            answer,
+            callType: activeCall.callType,
+          });
+        }
+        setCallState('connected');
+      }
     } catch (err) {
       console.error('Failed to accept call:', err);
     }
@@ -237,7 +269,7 @@ export const CallModal = ({
         </div>
       </div>
 
-      {/* Main Responsive Scrollable Video View */}
+      {/* Main Responsive Video View */}
       <div className="flex-1 my-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center justify-center min-h-0">
         {/* LOCAL STREAM BOX */}
         <div className="relative w-full aspect-video md:aspect-auto md:h-full md:min-h-[300px] bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-xl flex items-center justify-center">
@@ -285,7 +317,7 @@ export const CallModal = ({
         </div>
       </div>
 
-      {/* Floating Responsive Sticky Bottom Control Bar */}
+      {/* Sticky Bottom Control Bar */}
       <div className="sticky bottom-2 z-20 bg-slate-900/90 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-800 shadow-2xl flex justify-center items-center gap-3 sm:gap-4 max-w-md mx-auto w-full shrink-0">
         {callState === 'incoming' ? (
           <>

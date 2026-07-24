@@ -34,14 +34,14 @@ import { InstantChat } from './pages/InstantChat';
 
 // Global Call Overlay component to display incoming/active call popup anywhere in app
 const GlobalCallOverlay = () => {
-  const { incomingCall, activeCall, rejectCall, endCall, socket } = useSocket();
+  const { incomingCall, activeCall, socket } = useSocket();
   const { user } = useAuth();
 
   if (!incomingCall && !activeCall) return null;
 
   const currentCallData = activeCall
     ? {
-        mode: activeCall.isConnected ? 'connected' : activeCall.isCaller ? 'outgoing' : 'incoming',
+        mode: activeCall.mode || (activeCall.isConnected ? 'connected' : activeCall.isCaller ? 'outgoing' : 'incoming'),
         callType: activeCall.callType,
         partner: activeCall.partner,
         offer: activeCall.offer,
@@ -58,10 +58,7 @@ const GlobalCallOverlay = () => {
       socket={socket}
       currentUser={user}
       activeCall={currentCallData}
-      onCloseCall={() => {
-        if (incomingCall) rejectCall();
-        else if (activeCall) endCall(activeCall.partner?._id);
-      }}
+      onCloseCall={() => {}}
     />
   );
 };
