@@ -6,6 +6,9 @@ export const initializeCallSockets = (io) => {
     // Store active room participants: meetingId -> Map(userId, { socketId, user, isMuted, isVideoOff })
     const meetingRooms = new Map();
 
+    // Store banned users per meeting: meetingId -> Set(userId)
+    const bannedMeetingUsers = new Map();
+
     // Store active 1-on-1 calls: callerId -> { recipientId, callType, startedAt, isAnswered }
     const activeCalls = new Map();
 
@@ -141,6 +144,15 @@ export const initializeCallSockets = (io) => {
         socket.on('join_meeting_room', async ({ meetingId, isMuted, isVideoOff }) => {
             if (!meetingId) return;
 
+            // Check if user was banned/removed from this meeting
+            const bannedSet = bannedMeetingUsers.get(meetingId);
+            if (bannedSet && bannedSet.has(userId)) {
+                socket.emit('join_rejected', {
+                    message: 'You were removed from this meeting by the host and cannot rejoin.',
+                });
+                return;
+            }
+
             try {
                 const targetMeeting = await Meeting.findById(meetingId).select('status').lean();
                 if (!targetMeeting || targetMeeting.status === 'ended') {
@@ -177,12 +189,34 @@ export const initializeCallSockets = (io) => {
             });
         });
 
-        socket.on('sending_signal', ({ userToSignal, callerId, signal }) => {
-            io.to(userToSignal).emit('user_signal', { signal, callerId });
+        socket.on('sending_signal', ({ userToSignal, signal }) => {
+            io.to(userToSignal).emit('user_signal', { signal, callerSocketId: socket.id, callerUser: socket.user });
         });
 
         socket.on('returning_signal', ({ signal, callerId }) => {
             io.to(callerId).emit('receiving_returned_signal', { signal, id: socket.id });
+        });
+
+        socket.on('group_ice_candidate', ({ targetSocketId, candidate }) => {
+            io.to(targetSocketId).emit('group_ice_candidate', { candidate, senderSocketId: socket.id });
+        });
+
+        // Media Toggle Sync (Mute / Unmute / Video Off)
+        socket.on('toggle_media_state', ({ meetingId, isMuted, isVideoOff }) => {
+            if (!meetingId) return;
+            const roomMap = meetingRooms.get(meetingId);
+            if (roomMap && roomMap.has(userId)) {
+                const p = roomMap.get(userId);
+                p.isMuted = Boolean(isMuted);
+                p.isVideoOff = Boolean(isVideoOff);
+            }
+            const roomName = `meeting_${meetingId}`;
+            socket.to(roomName).emit('peer_media_toggled', {
+                userId,
+                socketId: socket.id,
+                isMuted: Boolean(isMuted),
+                isVideoOff: Boolean(isVideoOff),
+            });
         });
 
         // Live In-Meeting Chat Message
@@ -208,13 +242,36 @@ export const initializeCallSockets = (io) => {
             }
         });
 
+        // Host Control: Unmute User
+        socket.on('host_unmute_user', ({ meetingId, targetUserId }) => {
+            const roomMap = meetingRooms.get(meetingId);
+            if (roomMap && roomMap.has(targetUserId)) {
+                const targetSocketId = roomMap.get(targetUserId).socketId;
+                io.to(targetSocketId).emit('unmuted_by_host');
+            }
+        });
+
         // Host Control: Remove/Kick User
         socket.on('host_remove_user', ({ meetingId, targetUserId }) => {
             const roomMap = meetingRooms.get(meetingId);
             if (roomMap && roomMap.has(targetUserId)) {
                 const targetSocketId = roomMap.get(targetUserId).socketId;
+                
+                // Add to banned list for this meeting
+                if (!bannedMeetingUsers.has(meetingId)) {
+                    bannedMeetingUsers.set(meetingId, new Set());
+                }
+                bannedMeetingUsers.get(meetingId).add(targetUserId);
+
+                // Notify target user
                 io.to(targetSocketId).emit('removed_by_host');
+
+                // Remove from meeting room map
                 roomMap.delete(targetUserId);
+
+                // Broadcast user_left_meeting to room so all users see them disappear immediately
+                const roomName = `meeting_${meetingId}`;
+                io.to(roomName).emit('user_left_meeting', { userId: targetUserId, socketId: targetSocketId });
             }
         });
 
@@ -223,6 +280,7 @@ export const initializeCallSockets = (io) => {
             const roomName = `meeting_${meetingId}`;
             io.to(roomName).emit('meeting_ended_by_host');
             meetingRooms.delete(meetingId);
+            bannedMeetingUsers.delete(meetingId);
         });
 
         socket.on('leave_meeting_room', ({ meetingId }) => {
@@ -236,7 +294,24 @@ export const initializeCallSockets = (io) => {
                 if (roomMap.size === 0) meetingRooms.delete(meetingId);
             }
 
-            socket.to(roomName).emit('user_left_meeting', { userId });
+            socket.to(roomName).emit('user_left_meeting', { userId, socketId: socket.id });
+        });
+
+        // Automatic Disconnect Cleanup
+        socket.on('disconnect', () => {
+            activeCalls.delete(userId);
+
+            meetingRooms.forEach((roomMap, meetingId) => {
+                if (roomMap.has(userId)) {
+                    const participant = roomMap.get(userId);
+                    roomMap.delete(userId);
+                    const roomName = `meeting_${meetingId}`;
+                    socket.to(roomName).emit('user_left_meeting', { userId, socketId: participant.socketId });
+                    if (roomMap.size === 0) {
+                        meetingRooms.delete(meetingId);
+                    }
+                }
+            });
         });
     });
 };
