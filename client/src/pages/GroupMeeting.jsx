@@ -68,6 +68,8 @@ export const GroupMeeting = () => {
   const setupMeetingSocket = () => {
     const token = getAccessToken();
     const socketUrl = getSocketUrl();
+    if (!socketUrl) return;
+
     const newSocket = io(socketUrl, {
       auth: { token },
       transports: ['polling', 'websocket'],
