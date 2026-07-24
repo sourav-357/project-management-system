@@ -5,7 +5,7 @@ import api, { getAccessToken } from '../api/axios';
 import { getSocketUrl } from '../utils/socketUrl';
 import { useAuth } from '../context/AuthContext';
 import {
-  Video, VideoOff, Mic, MicOff, MonitorUp, PhoneOff, MessageSquare, Pin, Send, Users, X, Volume2
+  Video, VideoOff, Mic, MicOff, MonitorUp, PhoneOff, MessageSquare, Pin, Send, Users, X
 } from 'lucide-react';
 
 const RTC_CONFIG = {
@@ -23,13 +23,20 @@ const PeerVideo = ({ peer, stream, isPinned, onPin, isHost, onHostMute, onHostUn
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
   }, [stream]);
 
   return (
     <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden relative flex items-center justify-center group min-h-[240px]">
       <video
-        ref={videoRef}
+        ref={(el) => {
+          videoRef.current = el;
+          if (el && stream && el.srcObject !== stream) {
+            el.srcObject = stream;
+            el.play().catch(() => {});
+          }
+        }}
         autoPlay
         playsInline
         className={`w-full h-full object-cover ${peer.isVideoOff || !stream ? 'hidden' : 'block'}`}
@@ -165,15 +172,30 @@ export const GroupMeeting = () => {
     };
   }, [meetingId]);
 
+  // Ensure local video element gets attached as soon as loading completes or DOM mounts
+  useEffect(() => {
+    if (!loading && localVideoRef.current && localStreamRef.current && !isScreenSharing) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [loading, isVideoOff, isScreenSharing, pinnedUser]);
+
   const initLocalMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: true,
       });
+      
+      // Ensure all audio and video tracks are explicitly enabled
+      stream.getTracks().forEach((track) => (track.enabled = true));
       localStreamRef.current = stream;
+
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
       return stream;
     } catch (err) {
@@ -192,10 +214,12 @@ export const GroupMeeting = () => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnectionsRef.current.set(targetSocketId, pc);
 
+    const activeStream = localStream || localStreamRef.current;
+
     // Add local stream tracks to PC
-    if (localStream) {
-      localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, localStream);
+    if (activeStream) {
+      activeStream.getTracks().forEach((track) => {
+        pc.addTrack(track, activeStream);
       });
     }
 
@@ -490,6 +514,7 @@ export const GroupMeeting = () => {
       }
       if (localVideoRef.current && localStreamRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
       }
       setIsScreenSharing(false);
     } else {
@@ -500,6 +525,7 @@ export const GroupMeeting = () => {
         screenStreamRef.current = screenStream;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
+          localVideoRef.current.play().catch(() => {});
         }
         setIsScreenSharing(true);
 
@@ -507,6 +533,7 @@ export const GroupMeeting = () => {
           setIsScreenSharing(false);
           if (localVideoRef.current && localStreamRef.current) {
             localVideoRef.current.srcObject = localStreamRef.current;
+            localVideoRef.current.play().catch(() => {});
           }
         };
       } catch (err) {
@@ -619,13 +646,26 @@ export const GroupMeeting = () => {
             <div className="h-full flex flex-col space-y-4">
               <div className="flex-1 bg-slate-900 rounded-2xl border-2 border-indigo-500 overflow-hidden relative flex items-center justify-center">
                 {pinnedUser === 'local' ? (
-                  <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+                  <video
+                    ref={(el) => {
+                      localVideoRef.current = el;
+                      if (el && localStreamRef.current && !isScreenSharing && el.srcObject !== localStreamRef.current) {
+                        el.srcObject = localStreamRef.current;
+                        el.play().catch(() => {});
+                      }
+                    }}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-contain"
+                  />
                 ) : (
                   <div className="w-full h-full relative">
                     <video
                       ref={(el) => {
                         if (el && peerStreams[pinnedUser]) {
                           el.srcObject = peerStreams[pinnedUser];
+                          el.play().catch(() => {});
                         }
                       }}
                       autoPlay
@@ -648,7 +688,13 @@ export const GroupMeeting = () => {
               {/* Local User Stream Box */}
               <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden relative flex items-center justify-center group min-h-[240px]">
                 <video
-                  ref={localVideoRef}
+                  ref={(el) => {
+                    localVideoRef.current = el;
+                    if (el && localStreamRef.current && !isScreenSharing && el.srcObject !== localStreamRef.current) {
+                      el.srcObject = localStreamRef.current;
+                      el.play().catch(() => {});
+                    }
+                  }}
                   autoPlay
                   playsInline
                   muted
