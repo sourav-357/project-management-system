@@ -117,7 +117,7 @@ export const InstantChat = () => {
     const socketUrl = getSocketUrl();
     const newSocket = io(socketUrl, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
     });
 
     newSocket.on('connect', () => {
